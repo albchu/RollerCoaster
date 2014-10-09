@@ -68,8 +68,8 @@ void displayFunc()
 	// and attribute config of buffers
 	glBindVertexArray( vaoID );
 	// Draw Quads, start at vertex 0, draw 4 of them (for a quad)
-	glDrawArrays( GL_QUADS, 0, 4 );
-
+	glDrawArrays(GL_LINE_LOOP, 0, 4);
+	
 	glutSwapBuffers();
 }
 
@@ -77,7 +77,7 @@ void idleFunc()
 {
 	// every frame refresh, rotate quad around y axis by 1 degree
 //	MVP = MVP * RotateAboutYMatrix( 1.0 );
-    M = M * RotateAboutYMatrix( 1.0 );
+    M = M * RotateAboutYMatrix( 0.1 );
     setupModelViewProjectionTransform();
 
 	// send changes to GPU
@@ -99,6 +99,7 @@ void resizeFunc( int width, int height )
     glutPostRedisplay();
 }
 
+//Albert Note: I dont know what this function does but without it, bad shit happens I comment it out
 void generateIDs()
 {
 	std::string vsSource = loadShaderStringfromFile( "./basic_vs.glsl" );
@@ -160,6 +161,8 @@ void reloadMVPUniform()
 			);
 }
 
+
+//Albert Note: I dont know what this function does 
 void setupVAO()
 {
 	glBindVertexArray( vaoID );
@@ -189,19 +192,24 @@ void setupVAO()
 	glBindVertexArray( 0 ); // reset to default		
 }
 
+//std::vector subdivision()
+
 void loadBuffer()
 {
 	// Just basic layout of floats, for a quad
 	// 3 floats per vertex, 4 vertices
 	std::vector< Vec3f > verts;
 	verts.push_back( Vec3f( 1, 1, 0 ) );
-	verts.push_back( Vec3f( 1, -1, 0 ) );
+	verts.push_back( Vec3f( 1, -.5, 0 ) );
 	verts.push_back( Vec3f( -1, -1, 0 ) );
 	verts.push_back( Vec3f( -1, 1, 0 ) );
 	
+//	verts = subdivision(verts);
+
+	cout << "verts size is " << verts.size() << endl;
 	glBindBuffer( GL_ARRAY_BUFFER, vertBufferID );
 	glBufferData(	GL_ARRAY_BUFFER,	
-			sizeof(Vec3f)*4,	// byte size of Vec3f, 4 of them
+		sizeof(Vec3f) * verts.size(),	// byte size of Vec3f, 4 of them
 			verts.data(),		// pointer (Vec3f*) to contents of verts
 			GL_STATIC_DRAW );	// Usage pattern of GPU buffer
 
@@ -244,7 +252,7 @@ int main( int argc, char** argv )
 	glutInitWindowSize( WIN_WIDTH, WIN_HEIGHT );
 	glutInitWindowPosition( 0, 0 );
 
-	glutCreateWindow( "Tut08" );
+	glutCreateWindow( "Assignment 1: Rollercoaster" );
 
 	glewExperimental=true; // Needed in Core Profile
 	// Comment out if you want to us glBeign etc...
@@ -257,7 +265,7 @@ int main( int argc, char** argv )
 
     glutDisplayFunc( displayFunc );
 	glutReshapeFunc( resizeFunc );
-    glutIdleFunc( idleFunc );
+    //glutIdleFunc( idleFunc );		// Stop the window from rotating until we reach the bead stage
 
 	init(); // our own initialize stuff func
 
