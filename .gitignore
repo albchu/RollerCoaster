@@ -19,7 +19,7 @@ target/
 *.com
 *.class
 *.dll
-*.exe
+**.exe
 *.o
 *.so
 
@@ -61,4 +61,4 @@ test-output/
 
 # Visual Studio Files #
 #############################
-*Debug/*
+**Debug/*

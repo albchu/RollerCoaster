@@ -1,16 +1,7 @@
-// CPSC 587 Created By: Andrew Owens
-// This is a (very) basic program to
-// 1) load shaders from external files, and make a shader program
-// 2) make Vertex Array Object and Vertex Buffer Object for the triangle
-
-// take a look at the following sites for further readings:
-// opengl-tutorial.org -> The first triangle (New OpenGL, great start)
-// antongerdelan.net -> shaders pipeline explained
-// ogldev.atspace.co.uk -> good resource 
-
-
-// NOTE: this dependencies (include/library files) will need to be tweaked if
-// you wish to run this on a non lab computer
+// CPSC 587 Assignment 1
+// Albert Chu 10059388
+// Adapted and using code originally written by Andrew Owens
+#include <sstream>
 
 #include<iostream>
 #include<cmath>
@@ -22,6 +13,7 @@
 #include "Vec3f.h"
 #include "Mat4f.h"
 #include "OpenGLMatrixTools.h"
+#include <math.h>
 
 using std::cout;
 using std::endl;
@@ -56,6 +48,74 @@ void setupModelViewProjectionTransform();
 void reloadMVPUniform();
 int main( int, char** );
 // function declarations
+std::vector< Vec3f > verts;
+typedef std::vector< Vec3f > VecV3f;
+
+void loadVec3fFromFile(VecV3f & vecs, std::string const & fileName)
+{
+	using std::string;
+	using std::stringstream;
+	using std::istream_iterator;
+
+	std::ifstream file(fileName);
+
+	if (!file)
+	{
+		throw std::runtime_error("Unable to open file.");
+	}
+
+	string line;
+	size_t index;
+	stringstream ss(std::ios_base::in);
+
+	size_t lineNum = 0;
+	vecs.clear();
+
+	while (getline(file, line))
+	{
+		++lineNum;
+
+		// remove comments	
+		index = line.find_first_of("#");
+		if (index != string::npos)
+		{
+			line.erase(index, string::npos);
+		}
+
+		// removes leading/tailing junk
+		line.erase(0, line.find_first_not_of(" \t\r\n\v\f"));
+		index = line.find_last_not_of(" \t\r\n\v\f") + 1;
+		if (index != string::npos)
+		{
+			line.erase(index, string::npos);
+		}
+
+		if (line.empty())
+		{
+			continue; // empty or commented out line
+		}
+
+		ss.str(line);
+		ss.clear();
+
+		Vec3f v;
+		ss >> v;
+
+		if (!ss || !ss.eof() || ss.good())
+		{
+			throw std::runtime_error("Error read file: "
+				+ line
+				+ " (line: "
+				+ std::to_string(lineNum)
+				+ ")");
+		}
+		else
+		{
+			vecs.push_back(v);
+		}
+	}
+	file.close();
+}
 
 void displayFunc()
 {
@@ -67,9 +127,11 @@ void displayFunc()
 	// Use VAO that holds buffer bindings
 	// and attribute config of buffers
 	glBindVertexArray( vaoID );
-	// Draw Quads, start at vertex 0, draw 4 of them (for a quad)
-	glDrawArrays(GL_LINE_LOOP, 0, 4);
-	
+	// Draw Quads, start at vertex 0, draw verts.size() of them (for a quad)
+	cout << "Verts size is " << verts.size() << endl;
+	glDrawArrays(GL_LINE_LOOP, 0, verts.size());
+	//glDrawArrays(GL_POINTS, 0, 8);
+
 	glutSwapBuffers();
 }
 
@@ -192,42 +254,91 @@ void setupVAO()
 	glBindVertexArray( 0 ); // reset to default		
 }
 
-//std::vector subdivision()
-
-void loadBuffer()
+// Returns a subdivided vector array that goes to the specified depth of subdivision
+std::vector < Vec3f > subdivide(std::vector < Vec3f > verts)
 {
-	// Just basic layout of floats, for a quad
-	// 3 floats per vertex, 4 vertices
-	std::vector< Vec3f > verts;
-	verts.push_back( Vec3f( 1, 1, 0 ) );
-	verts.push_back( Vec3f( 1, -.5, 0 ) );
-	verts.push_back( Vec3f( -1, -1, 0 ) );
-	verts.push_back( Vec3f( -1, 1, 0 ) );
-	
-//	verts = subdivision(verts);
+	std::vector < Vec3f > new_verts;
+	for (int i = 0; i < verts.size(); i++)
+	{
+		Vec3f const& v1 = verts[i];
+		Vec3f const& v2 = verts[(i + 1) % verts.size()];
+		Vec3f mid = (v1 + v2) * 0.5;
+		new_verts.push_back(v1);
+		new_verts.push_back(mid);
+	}
+	return new_verts;
+}
 
-	cout << "verts size is " << verts.size() << endl;
+// Returns a subdivided vector array that goes to the specified depth of subdivision
+std::vector < Vec3f > subdivision(std::vector < Vec3f > original_verts, int depth)
+{
+	cout << "WELCOME TO SUBDIVISION()" << endl;
+	cout << "Original verts size is " << verts.size() << endl;
+	std::vector < Vec3f > new_verts = original_verts;
+	
+	for (int i = 0; i < depth; i++)
+	{
+		new_verts = subdivide(new_verts);
+	}
+	cout << "New verts size is " << new_verts.size() << endl;
+
+	//Delete original points
+	int shifted_index = pow(2, depth);
+	for (int i = original_verts.size() - 1; i >= 0; i--)
+	{
+		int delete_index = i * shifted_index;
+		if (delete_index + 1 >= new_verts.size())	//Simple sanity check to ensure calculations is correct
+			cerr << "Delete index wasnt calculated correctly. " << delete_index << " < new_verts.size() (" << new_verts.size() << ")" << endl;
+		new_verts.erase(new_verts.begin() + delete_index);
+	}
+	cout << "New verts size is " << new_verts.size() << " after deleting original points" << endl;
+
+	return new_verts;
+}
+
+float getRandFloat(float low, float high)
+{
+	return (low + static_cast <float> (rand()) / (static_cast <float> (RAND_MAX / (high - low))));
+}
+
+void loadBuffer(std::string file_path)
+{
+	loadVec3fFromFile(verts, file_path);
+	//verts.push_back( Vec3f( 1, 1, 4 ) );
+	//verts.push_back( Vec3f( 1, -1, 3 ) );
+	//verts.push_back( Vec3f( -1, -1, -2 ) );
+	//verts.push_back( Vec3f( -1, 1, 1 ) );
+	//verts.push_back(Vec3f(-1, 1, 2));
+
+	cout << "Original verts size is " << verts.size() << endl;
+	verts = subdivision(verts, 4);
+	cout << "Subdivided verts size is " << verts.size() << endl;
+
 	glBindBuffer( GL_ARRAY_BUFFER, vertBufferID );
 	glBufferData(	GL_ARRAY_BUFFER,	
 		sizeof(Vec3f) * verts.size(),	// byte size of Vec3f, 4 of them
-			verts.data(),		// pointer (Vec3f*) to contents of verts
+		verts.data(),		// pointer (Vec3f*) to contents of verts
 			GL_STATIC_DRAW );	// Usage pattern of GPU buffer
 
-	// RGB values for the 4 vertices of the quad
-	const float colors[] = {
-			1.0f,	0.0f,	0.0f,
-			0.0f,	1.0f,	0.0f,
-			0.0f,	0.0f,	1.0f,
-			1.0f,	1.0f,	1.0f };
+	// RGB values for the vertices
+	std::vector<Vec3f> colors;
+	for (int i = 0; i < verts.size(); i++)
+	{
+		float r = getRandFloat(0.50, 1.0);
+		float g = getRandFloat(0.50, 1.0);
+		float b = getRandFloat(0.50, 1.0);
+		cout << r << endl;
+		colors.push_back(Vec3f(r, g, b));
+	}
 
 	glBindBuffer( GL_ARRAY_BUFFER, colorBufferID );
 	glBufferData(	GL_ARRAY_BUFFER,
-			sizeof(colors),
-			colors,
+		sizeof(Vec3f)*colors.size(),
+			colors.data(),
 			GL_STATIC_DRAW );
 }
 
-void init()
+void init(std::string file_path)
 {
 	glEnable( GL_DEPTH_TEST );
 
@@ -235,7 +346,7 @@ void init()
 
 	generateIDs();
 	setupVAO();
-	loadBuffer();
+	loadBuffer(file_path);
 
     loadModelViewMatrix();
     loadProjectionMatrix();
@@ -265,9 +376,9 @@ int main( int argc, char** argv )
 
     glutDisplayFunc( displayFunc );
 	glutReshapeFunc( resizeFunc );
-    //glutIdleFunc( idleFunc );		// Stop the window from rotating until we reach the bead stage
-
-	init(); // our own initialize stuff func
+    glutIdleFunc( idleFunc );		// Stop the window from rotating until we reach the bead stage
+	std::string file("C:\\Users\\Albert\\git\\CPSC-587\\Assignment1\\RollerCoaster\\RollerCoaster\\test.txt");
+	init(file); // our own initialize stuff func
 
 	glutMainLoop();
 
