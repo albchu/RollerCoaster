@@ -56,7 +56,22 @@ int main( int, char** );
 std::vector< Vec3f > trackVerts;
 std::vector< Vec3f > carVerts;
 
+bool left_click = false;
+bool right_click = false;
+bool translate = false;
+double delta_x = 0;
+double delta_y = 0;
+double delta_z = 0;
+
 typedef std::vector< Vec3f > VecV3f;
+
+void render()
+{
+	setupModelViewProjectionTransform();
+	// send changes to GPU
+	reloadMVPUniform();
+	glutPostRedisplay();
+}
 
 void loadVec3fFromFile(VecV3f & vecs, std::string const & fileName)
 {
@@ -145,19 +160,90 @@ void displayFunc()
 	glutSwapBuffers();
 }
 
-// Call back for mouse control of camera
-void mouseControl(int button, int state, int x, int y)
+//Keyboard commands for manipulating the enviorment
+void keyboardFunc(unsigned char key, int x, int y){
+
+	if (key == 'o')		// Orient view matrix to identity matrix 
+		V = IdentityMatrix();
+	if (key == 'r')		// Rotate Mode
+		translate = false;
+	if (key == 't')		// Translate Mode
+		translate = true;
+	render();
+}
+
+void mouseMove(int x, int y) 
 {
-	// Wheel reports as button 3(scroll up) and button 4(scroll down)
-	if ((button == 3) || (button == 4)) // It's a wheel event
+	if (left_click)
 	{
-		// Each wheel event reports like a button click, GLUT_DOWN then GLUT_UP
-		if (state == GLUT_UP) return; // Disregard redundant GLUT_UP events
-		printf("Scroll %s At %d %d\n", (button == 3) ? "Up" : "Down", x, y);
+		delta_y -= y;
+		delta_x -= x;
+
+		if (translate)
+			V = TranslateMatrix(-delta_x / 300, delta_y/500, 0) * V;
+		else
+		{
+			V = V * RotateAboutYMatrix(delta_x / 10);
+			V = V * RotateAboutXMatrix(delta_y / 10);
+		}
+
+		delta_x = x;
+		delta_y = y;
 	}
-	else{  // normal button event
+	if (right_click)
+	{
+		delta_z -= y;
+		if (translate)
+			V = TranslateMatrix(0, 0, delta_z/500) * V;
+		else
+		{
+			V = V * RotateAboutZMatrix(delta_y / 100);
+		}
+		delta_z = y;
+	}
+	render();
+}
+
+void mouseButton(int button, int state, int x, int y)
+{
+	switch (button)
+	{
+	case GLUT_LEFT_BUTTON:
+		cout << "Left Button" << endl;
+		if (state == GLUT_DOWN){
+			left_click = true;
+			delta_x = x;
+			delta_y = y;
+		}
+		else {
+			left_click = false;
+		}
+		break;
+	case GLUT_MIDDLE_BUTTON:
+		break;
+	case GLUT_RIGHT_BUTTON:
+		if (state == GLUT_DOWN){
+			right_click = true;
+			delta_z = y;
+		}
+		else {
+			right_click = false;
+		}
+		break;
+	default:
+		cerr << "Encountered an error with mouse button : " << button << ", state : " << state << endl;
+	}
+	//// Wheel reports as button 3(scroll up) and button 4(scroll down)
+	//if ((button == 3) || (button == 4)) // It's a wheel event
+	//{
+	//	// Each wheel event reports like a button click, GLUT_DOWN then GLUT_UP
+	//	if (state == GLUT_UP) return; // Disregard redundant GLUT_UP events
+	//	printf("Scroll %s At %d %d\n", (button == 3) ? "Up" : "Down", x, y);
+	//}
+	//else{  // normal button event
+	//}
+		cout << "Button: " << button << ", State: " << state << endl;
 		printf("Button %s At %d %d\n", (state == GLUT_DOWN) ? "Down" : "Up", x, y);
-	}
 }
 
 void idleFunc()
@@ -165,12 +251,7 @@ void idleFunc()
 	// every frame refresh, rotate quad around y axis by 1 degree
 //	MVP = MVP * RotateAboutYMatrix( 1.0 );
     M = M * RotateAboutYMatrix( 0.01 );
-    setupModelViewProjectionTransform();
-
-	// send changes to GPU
-	reloadMVPUniform();
-	
-	glutPostRedisplay();
+	render();
 }
 
 void resizeFunc( int width, int height )
@@ -233,7 +314,7 @@ void loadProjectionMatrix()
 void loadModelViewMatrix()
 {
     M = UniformScaleMatrix( 0.25 );	// scale Quad First
-    M = TranslateMatrix( 0, 0, -1.0 ) * M;	// translate away from (0,0,0)
+    M = TranslateMatrix( 0, 0, -2.0 ) * M;	// translate away from (0,0,0)
 
     // view doesn't change, but if it did you would use this
     V = IdentityMatrix();
@@ -469,7 +550,9 @@ int main( int argc, char** argv )
     glutDisplayFunc( displayFunc );
 	glutReshapeFunc( resizeFunc );
     glutIdleFunc( idleFunc );		
-	glutMouseFunc(mouseControl);
+	glutMouseFunc(mouseButton);
+	glutMotionFunc(mouseMove);
+	glutKeyboardFunc(keyboardFunc);
 	std::string track("C:\\Users\\Albert\\git\\CPSC-587\\Assignment1\\RollerCoaster\\RollerCoaster\\track.txt");
 	std::string car("C:\\Users\\Albert\\git\\CPSC-587\\Assignment1\\RollerCoaster\\RollerCoaster\\car.txt");
 	init(track, car); // our own initialize stuff func
