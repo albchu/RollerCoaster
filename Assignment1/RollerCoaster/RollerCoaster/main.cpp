@@ -7,7 +7,7 @@
 #include<cmath>
 
 #include<GL/glew.h> // include BEFORE glut
-#include<glut.h>
+#include<GL/freeglut.h>
 
 #include "ShaderTools.h"
 #include "Vec3f.h"
@@ -19,17 +19,22 @@ using std::cout;
 using std::endl;
 using std::cerr;
 
-GLuint vaoID;
+GLuint vaoTrackID;
+GLuint vaoCarID;
+
 GLuint basicProgramID;
 
 // Could store these two in an array GLuint[]
-GLuint vertBufferID;
-GLuint colorBufferID;
+GLuint trackVertBufferID;
+GLuint trackColorBufferID; 
+
+GLuint carVertBufferID;
+GLuint carColorBufferID;
 
 Mat4f MVP;
-Mat4f M;
-Mat4f V;
-Mat4f P;
+Mat4f M; // model matrix
+Mat4f V; // view matrix
+Mat4f P; // projection matrix can be left alone
 
 int WIN_WIDTH = 800, WIN_HEIGHT = 600;
 
@@ -126,20 +131,38 @@ void displayFunc()
 
 	// Use VAO that holds buffer bindings
 	// and attribute config of buffers
-	glBindVertexArray( vaoID );
-	// Draw Quads, start at vertex 0, draw verts.size() of them (for a quad)
-	cout << "Verts size is " << verts.size() << endl;
+
+	// Draw track
+	glBindVertexArray(vaoTrackID);
 	glDrawArrays(GL_LINE_LOOP, 0, verts.size());
-	//glDrawArrays(GL_POINTS, 0, 8);
+
+	// Draw track
+	glBindVertexArray(vaoCarID);
+	glDrawArrays(GL_QUADS, 0, verts.size());
 
 	glutSwapBuffers();
+}
+
+// Call back for mouse control of camera
+void mouseControl(int button, int state, int x, int y)
+{
+	// Wheel reports as button 3(scroll up) and button 4(scroll down)
+	if ((button == 3) || (button == 4)) // It's a wheel event
+	{
+		// Each wheel event reports like a button click, GLUT_DOWN then GLUT_UP
+		if (state == GLUT_UP) return; // Disregard redundant GLUT_UP events
+		printf("Scroll %s At %d %d\n", (button == 3) ? "Up" : "Down", x, y);
+	}
+	else{  // normal button event
+		printf("Button %s At %d %d\n", (state == GLUT_DOWN) ? "Down" : "Up", x, y);
+	}
 }
 
 void idleFunc()
 {
 	// every frame refresh, rotate quad around y axis by 1 degree
 //	MVP = MVP * RotateAboutYMatrix( 1.0 );
-    M = M * RotateAboutYMatrix( 0.1 );
+    M = M * RotateAboutYMatrix( 0.01 );
     setupModelViewProjectionTransform();
 
 	// send changes to GPU
@@ -161,7 +184,6 @@ void resizeFunc( int width, int height )
     glutPostRedisplay();
 }
 
-//Albert Note: I dont know what this function does but without it, bad shit happens I comment it out
 void generateIDs()
 {
 	std::string vsSource = loadShaderStringfromFile( "./basic_vs.glsl" );
@@ -169,17 +191,26 @@ void generateIDs()
 	basicProgramID = CreateShaderProgram( vsSource, fsSource );
 
 	// load IDs given from OpenGL
-	glGenVertexArrays( 1, &vaoID );
-	glGenBuffers( 1, &vertBufferID );
-	glGenBuffers( 1, &colorBufferID );
+	glGenVertexArrays(1, &vaoTrackID);
+	glGenBuffers(1, &trackVertBufferID);
+	glGenBuffers(1, &trackColorBufferID);
+
+	glGenVertexArrays(1, &vaoCarID);
+	glGenBuffers(1, &carVertBufferID);
+	glGenBuffers(1, &carColorBufferID);
 }
 
 void deleteIDs()
 {
 	glDeleteProgram( basicProgramID );
-	glDeleteVertexArrays( 1, &vaoID );
-	glDeleteBuffers( 1, &vertBufferID );
-	glDeleteBuffers( 1, &colorBufferID );
+
+	glDeleteVertexArrays(1, &vaoTrackID);
+	glDeleteBuffers(1, &trackVertBufferID);
+	glDeleteBuffers(1, &trackColorBufferID);
+
+	glDeleteVertexArrays(1, &vaoCarID);
+	glDeleteBuffers(1, &carVertBufferID);
+	glDeleteBuffers(1, &carColorBufferID);
 }
 
 void loadProjectionMatrix()
@@ -225,12 +256,12 @@ void reloadMVPUniform()
 
 
 //Albert Note: I dont know what this function does 
-void setupVAO()
+void setupTrackVAO()
 {
-	glBindVertexArray( vaoID );
+	glBindVertexArray(vaoTrackID);
 
-	glEnableVertexAttribArray( 0 ); // match layout # in shader
-	glBindBuffer( GL_ARRAY_BUFFER, vertBufferID );
+	glEnableVertexAttribArray(0); // match layout # in shader
+	glBindBuffer(GL_ARRAY_BUFFER, trackVertBufferID);
 	glVertexAttribPointer(
 		0,		// attribute layout # above
 		3,		// # of components (ie XYZ )
@@ -238,10 +269,10 @@ void setupVAO()
 		GL_FALSE,	// need to be normalized?
 		0,		// stride
 		(void*)0	// array buffer offset
-	);
+		);
 
-	glEnableVertexAttribArray( 1 ); // match layout # in shader
-	glBindBuffer( GL_ARRAY_BUFFER, colorBufferID );
+	glEnableVertexAttribArray(1); // match layout # in shader
+	glBindBuffer(GL_ARRAY_BUFFER, trackColorBufferID);
 	glVertexAttribPointer(
 		1,		// attribute layout # above
 		3,		// # of components (ie XYZ )
@@ -249,12 +280,41 @@ void setupVAO()
 		GL_FALSE,	// need to be normalized?
 		0,		// stride
 		(void*)0	// array buffer offset
-	);
+		);
 
-	glBindVertexArray( 0 ); // reset to default		
+	glBindVertexArray(0); // reset to default		
 }
 
-// Returns a subdivided vector array that goes to the specified depth of subdivision
+void setupCarVAO()
+{
+	glBindVertexArray(vaoCarID);
+
+	glEnableVertexAttribArray(0); // match layout # in shader
+	glBindBuffer(GL_ARRAY_BUFFER, carVertBufferID);
+	glVertexAttribPointer(
+		0,		// attribute layout # above
+		3,		// # of components (ie XYZ )
+		GL_FLOAT,	// type of components
+		GL_FALSE,	// need to be normalized?
+		0,		// stride
+		(void*)0	// array buffer offset
+		);
+
+	glEnableVertexAttribArray(1); // match layout # in shader
+	glBindBuffer(GL_ARRAY_BUFFER, carColorBufferID);
+	glVertexAttribPointer(
+		1,		// attribute layout # above
+		3,		// # of components (ie XYZ )
+		GL_FLOAT,	// type of components
+		GL_FALSE,	// need to be normalized?
+		0,		// stride
+		(void*)0	// array buffer offset
+		);
+
+	glBindVertexArray(0); // reset to default		
+}
+
+// Returns a subdivided vector array that adds another point in between each existing point in vector
 std::vector < Vec3f > subdivide(std::vector < Vec3f > verts)
 {
 	std::vector < Vec3f > new_verts;
@@ -264,6 +324,20 @@ std::vector < Vec3f > subdivide(std::vector < Vec3f > verts)
 		Vec3f const& v2 = verts[(i + 1) % verts.size()];
 		Vec3f mid = (v1 + v2) * 0.5;
 		new_verts.push_back(v1);
+		new_verts.push_back(mid);
+	}
+	return new_verts;
+}
+
+// Returns a subdivided vector array that offsets each existing point in vector halfway to its next neighbor
+std::vector < Vec3f > offset(std::vector < Vec3f > verts)
+{
+	std::vector < Vec3f > new_verts;
+	for (int i = 0; i < verts.size(); i++)
+	{
+		Vec3f const& v1 = verts[i];
+		Vec3f const& v2 = verts[(i + 1) % verts.size()];
+		Vec3f mid = (v1 + v2) * 0.5;
 		new_verts.push_back(mid);
 	}
 	return new_verts;
@@ -279,19 +353,9 @@ std::vector < Vec3f > subdivision(std::vector < Vec3f > original_verts, int dept
 	for (int i = 0; i < depth; i++)
 	{
 		new_verts = subdivide(new_verts);
+		new_verts = offset(new_verts);
 	}
 	cout << "New verts size is " << new_verts.size() << endl;
-
-	//Delete original points
-	int shifted_index = pow(2, depth);
-	for (int i = original_verts.size() - 1; i >= 0; i--)
-	{
-		int delete_index = i * shifted_index;
-		if (delete_index + 1 >= new_verts.size())	//Simple sanity check to ensure calculations is correct
-			cerr << "Delete index wasnt calculated correctly. " << delete_index << " < new_verts.size() (" << new_verts.size() << ")" << endl;
-		new_verts.erase(new_verts.begin() + delete_index);
-	}
-	cout << "New verts size is " << new_verts.size() << " after deleting original points" << endl;
 
 	return new_verts;
 }
@@ -304,21 +368,22 @@ float getRandFloat(float low, float high)
 void loadBuffer(std::string file_path)
 {
 	loadVec3fFromFile(verts, file_path);
-	//verts.push_back( Vec3f( 1, 1, 4 ) );
-	//verts.push_back( Vec3f( 1, -1, 3 ) );
-	//verts.push_back( Vec3f( -1, -1, -2 ) );
-	//verts.push_back( Vec3f( -1, 1, 1 ) );
-	//verts.push_back(Vec3f(-1, 1, 2));
 
 	cout << "Original verts size is " << verts.size() << endl;
-	verts = subdivision(verts, 4);
+	//verts = subdivision(verts, 4);
 	cout << "Subdivided verts size is " << verts.size() << endl;
 
-	glBindBuffer( GL_ARRAY_BUFFER, vertBufferID );
-	glBufferData(	GL_ARRAY_BUFFER,	
+	glBindBuffer(GL_ARRAY_BUFFER, trackVertBufferID);
+	glBufferData(GL_ARRAY_BUFFER,
 		sizeof(Vec3f) * verts.size(),	// byte size of Vec3f, 4 of them
 		verts.data(),		// pointer (Vec3f*) to contents of verts
-			GL_STATIC_DRAW );	// Usage pattern of GPU buffer
+		GL_STATIC_DRAW);	// Usage pattern of GPU buffer
+
+	glBindBuffer(GL_ARRAY_BUFFER, carVertBufferID);
+	glBufferData(GL_ARRAY_BUFFER,
+		sizeof(Vec3f) * verts.size(),	// byte size of Vec3f, 4 of them
+		verts.data(),		// pointer (Vec3f*) to contents of verts
+		GL_STATIC_DRAW);	// Usage pattern of GPU buffer
 
 	// RGB values for the vertices
 	std::vector<Vec3f> colors;
@@ -331,11 +396,18 @@ void loadBuffer(std::string file_path)
 		colors.push_back(Vec3f(r, g, b));
 	}
 
-	glBindBuffer( GL_ARRAY_BUFFER, colorBufferID );
-	glBufferData(	GL_ARRAY_BUFFER,
+	glBindBuffer(GL_ARRAY_BUFFER, trackColorBufferID);
+	glBufferData(GL_ARRAY_BUFFER,
 		sizeof(Vec3f)*colors.size(),
-			colors.data(),
-			GL_STATIC_DRAW );
+		colors.data(),
+		GL_STATIC_DRAW);
+
+
+	glBindBuffer(GL_ARRAY_BUFFER, carColorBufferID);
+	glBufferData(GL_ARRAY_BUFFER,
+		sizeof(Vec3f)*colors.size(),
+		colors.data(),
+		GL_STATIC_DRAW);
 }
 
 void init(std::string file_path)
@@ -345,7 +417,8 @@ void init(std::string file_path)
 	// SETUP SHADERS, BUFFERS, VAOs
 
 	generateIDs();
-	setupVAO();
+	setupTrackVAO();
+	setupCarVAO();
 	loadBuffer(file_path);
 
     loadModelViewMatrix();
@@ -376,7 +449,8 @@ int main( int argc, char** argv )
 
     glutDisplayFunc( displayFunc );
 	glutReshapeFunc( resizeFunc );
-    glutIdleFunc( idleFunc );		// Stop the window from rotating until we reach the bead stage
+    glutIdleFunc( idleFunc );		
+	glutMouseFunc(mouseControl);
 	std::string file("C:\\Users\\Albert\\git\\CPSC-587\\Assignment1\\RollerCoaster\\RollerCoaster\\test.txt");
 	init(file); // our own initialize stuff func
 
