@@ -19,15 +19,15 @@ using std::cout;
 using std::endl;
 using std::cerr;
 
-GLuint vaoTrackID;
-GLuint vaoCarID;
 
 GLuint basicProgramID;
 
-// Could store these two in an array GLuint[]
+// Could store these in some data structure
+GLuint vaoTrackID;
 GLuint trackVertBufferID;
 GLuint trackColorBufferID; 
 
+GLuint vaoCarID;
 GLuint carVertBufferID;
 GLuint carColorBufferID;
 
@@ -53,7 +53,9 @@ void setupModelViewProjectionTransform();
 void reloadMVPUniform();
 int main( int, char** );
 // function declarations
-std::vector< Vec3f > verts;
+std::vector< Vec3f > trackVerts;
+std::vector< Vec3f > carVerts;
+
 typedef std::vector< Vec3f > VecV3f;
 
 void loadVec3fFromFile(VecV3f & vecs, std::string const & fileName)
@@ -134,11 +136,11 @@ void displayFunc()
 
 	// Draw track
 	glBindVertexArray(vaoTrackID);
-	glDrawArrays(GL_LINE_LOOP, 0, verts.size());
+	glDrawArrays(GL_LINE_LOOP, 0, trackVerts.size());
 
 	// Draw track
 	glBindVertexArray(vaoCarID);
-	glDrawArrays(GL_QUADS, 0, verts.size());
+	glDrawArrays(GL_TRIANGLES, 0, carVerts.size());
 
 	glutSwapBuffers();
 }
@@ -254,8 +256,6 @@ void reloadMVPUniform()
 			);
 }
 
-
-//Albert Note: I dont know what this function does 
 void setupTrackVAO()
 {
 	glBindVertexArray(vaoTrackID);
@@ -346,17 +346,12 @@ std::vector < Vec3f > offset(std::vector < Vec3f > verts)
 // Returns a subdivided vector array that goes to the specified depth of subdivision
 std::vector < Vec3f > subdivision(std::vector < Vec3f > original_verts, int depth)
 {
-	cout << "WELCOME TO SUBDIVISION()" << endl;
-	cout << "Original verts size is " << verts.size() << endl;
 	std::vector < Vec3f > new_verts = original_verts;
-	
 	for (int i = 0; i < depth; i++)
 	{
 		new_verts = subdivide(new_verts);
 		new_verts = offset(new_verts);
 	}
-	cout << "New verts size is " << new_verts.size() << endl;
-
 	return new_verts;
 }
 
@@ -365,29 +360,24 @@ float getRandFloat(float low, float high)
 	return (low + static_cast <float> (rand()) / (static_cast <float> (RAND_MAX / (high - low))));
 }
 
-void loadBuffer(std::string file_path)
+// Sets up track vertex buffer from file, subdivide and process vectors to be smooth, Assign colors to the vertex shaders
+void loadTrackBuffer(std::string file_path)
 {
-	loadVec3fFromFile(verts, file_path);
+	loadVec3fFromFile(trackVerts, file_path);
 
-	cout << "Original verts size is " << verts.size() << endl;
-	//verts = subdivision(verts, 4);
-	cout << "Subdivided verts size is " << verts.size() << endl;
+	cout << "Original verts size is " << trackVerts.size() << endl;
+	trackVerts = subdivision(trackVerts, 3);
+	cout << "Subdivided verts size is " << trackVerts.size() << endl;
 
 	glBindBuffer(GL_ARRAY_BUFFER, trackVertBufferID);
 	glBufferData(GL_ARRAY_BUFFER,
-		sizeof(Vec3f) * verts.size(),	// byte size of Vec3f, 4 of them
-		verts.data(),		// pointer (Vec3f*) to contents of verts
-		GL_STATIC_DRAW);	// Usage pattern of GPU buffer
-
-	glBindBuffer(GL_ARRAY_BUFFER, carVertBufferID);
-	glBufferData(GL_ARRAY_BUFFER,
-		sizeof(Vec3f) * verts.size(),	// byte size of Vec3f, 4 of them
-		verts.data(),		// pointer (Vec3f*) to contents of verts
+		sizeof(Vec3f) * trackVerts.size(),	// byte size of Vec3f, 4 of them
+		trackVerts.data(),		// pointer (Vec3f*) to contents of verts
 		GL_STATIC_DRAW);	// Usage pattern of GPU buffer
 
 	// RGB values for the vertices
 	std::vector<Vec3f> colors;
-	for (int i = 0; i < verts.size(); i++)
+	for (int i = 0; i < trackVerts.size(); i++)
 	{
 		float r = getRandFloat(0.50, 1.0);
 		float g = getRandFloat(0.50, 1.0);
@@ -401,7 +391,28 @@ void loadBuffer(std::string file_path)
 		sizeof(Vec3f)*colors.size(),
 		colors.data(),
 		GL_STATIC_DRAW);
+}
 
+void loadCarBuffer(std::string file_path)
+{
+	loadVec3fFromFile(carVerts, file_path);
+
+	glBindBuffer(GL_ARRAY_BUFFER, carVertBufferID);
+	glBufferData(GL_ARRAY_BUFFER,
+		sizeof(Vec3f) * carVerts.size(),	// byte size of Vec3f, 4 of them
+		carVerts.data(),		// pointer (Vec3f*) to contents of verts
+		GL_STATIC_DRAW);	// Usage pattern of GPU buffer
+
+	// RGB values for the vertices
+	std::vector<Vec3f> colors;
+	for (int i = 0; i < carVerts.size(); i++)
+	{
+		float r = getRandFloat(0.50, 1.0);
+		float g = getRandFloat(0.50, 1.0);
+		float b = getRandFloat(0.50, 1.0);
+		cout << r << endl;
+		colors.push_back(Vec3f(r, g, b));
+	}
 
 	glBindBuffer(GL_ARRAY_BUFFER, carColorBufferID);
 	glBufferData(GL_ARRAY_BUFFER,
@@ -410,7 +421,7 @@ void loadBuffer(std::string file_path)
 		GL_STATIC_DRAW);
 }
 
-void init(std::string file_path)
+void init(std::string track_file_path, std::string car_file_path)
 {
 	glEnable( GL_DEPTH_TEST );
 
@@ -419,14 +430,22 @@ void init(std::string file_path)
 	generateIDs();
 	setupTrackVAO();
 	setupCarVAO();
-	loadBuffer(file_path);
+	loadTrackBuffer(track_file_path);
+	loadCarBuffer(car_file_path);
 
     loadModelViewMatrix();
     loadProjectionMatrix();
 	setupModelViewProjectionTransform();
 	reloadMVPUniform();
 }
-
+void printInfo()
+{
+	cout << "Using GLEW " << glewGetString(GLEW_VERSION) << endl;
+	cout << "Vendor: " << glGetString(GL_VENDOR) << endl;
+	cout << "Renderer: " << glGetString(GL_RENDERER) << endl;
+	cout << "Version: " << glGetString(GL_VERSION) << endl;
+	cout << "GLSL: " << glGetString(GL_SHADING_LANGUAGE_VERSION) << endl;
+}
 int main( int argc, char** argv )
 {
     glutInit( &argc, argv );
@@ -445,14 +464,15 @@ int main( int argc, char** argv )
 		cerr << "Failed to initialize GLEW" << endl;
 		return -1;
 	}
-	cout << "GL Version: :" << glGetString(GL_VERSION) << endl;
+	printInfo();
 
     glutDisplayFunc( displayFunc );
 	glutReshapeFunc( resizeFunc );
     glutIdleFunc( idleFunc );		
 	glutMouseFunc(mouseControl);
-	std::string file("C:\\Users\\Albert\\git\\CPSC-587\\Assignment1\\RollerCoaster\\RollerCoaster\\test.txt");
-	init(file); // our own initialize stuff func
+	std::string track("C:\\Users\\Albert\\git\\CPSC-587\\Assignment1\\RollerCoaster\\RollerCoaster\\track.txt");
+	std::string car("C:\\Users\\Albert\\git\\CPSC-587\\Assignment1\\RollerCoaster\\RollerCoaster\\car.txt");
+	init(track, car); // our own initialize stuff func
 
 	glutMainLoop();
 

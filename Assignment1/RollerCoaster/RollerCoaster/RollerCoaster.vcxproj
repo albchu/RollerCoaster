@@ -87,7 +87,8 @@
     <ClInclude Include="Vec3f.h" />
   </ItemGroup>
   <ItemGroup>
-    <Text Include="test.txt" />
+    <Text Include="car.txt" />
+    <Text Include="track.txt" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

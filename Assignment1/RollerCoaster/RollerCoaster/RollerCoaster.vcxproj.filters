@@ -54,7 +54,10 @@
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <Text Include="test.txt">
+    <Text Include="track.txt">
+      <Filter>Source Files</Filter>
+    </Text>
+    <Text Include="car.txt">
       <Filter>Source Files</Filter>
     </Text>
   </ItemGroup>
