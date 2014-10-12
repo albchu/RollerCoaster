@@ -58,7 +58,7 @@ std::vector< Vec3f > carVerts;
 
 bool left_click = false;
 bool right_click = false;
-bool translate = false;
+bool translate = true;
 double delta_x = 0;
 double delta_y = 0;
 double delta_z = 0;
@@ -151,6 +151,8 @@ void displayFunc()
 
 	// Draw track
 	glBindVertexArray(vaoTrackID);
+	GLfloat width = 50;
+	glLineWidth(width);
 	glDrawArrays(GL_LINE_LOOP, 0, trackVerts.size());
 
 	// Draw track
@@ -233,15 +235,6 @@ void mouseButton(int button, int state, int x, int y)
 	default:
 		cerr << "Encountered an error with mouse button : " << button << ", state : " << state << endl;
 	}
-	//// Wheel reports as button 3(scroll up) and button 4(scroll down)
-	//if ((button == 3) || (button == 4)) // It's a wheel event
-	//{
-	//	// Each wheel event reports like a button click, GLUT_DOWN then GLUT_UP
-	//	if (state == GLUT_UP) return; // Disregard redundant GLUT_UP events
-	//	printf("Scroll %s At %d %d\n", (button == 3) ? "Up" : "Down", x, y);
-	//}
-	//else{  // normal button event
-	//}
 		cout << "Button: " << button << ", State: " << state << endl;
 		printf("Button %s At %d %d\n", (state == GLUT_DOWN) ? "Down" : "Up", x, y);
 }
