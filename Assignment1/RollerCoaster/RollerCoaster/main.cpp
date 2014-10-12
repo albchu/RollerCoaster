@@ -15,26 +15,29 @@
 #include "OpenGLMatrixTools.h"
 #include <math.h>
 
-using std::cout;
-using std::endl;
-using std::cerr;
+using namespace std;
 
 
-GLuint basicProgramID;
 
 // Could store these in some data structure
 GLuint vaoTrackID;
+GLuint trackProgramID;
 GLuint trackVertBufferID;
 GLuint trackColorBufferID; 
 
 GLuint vaoCarID;
+GLuint carProgramID;
 GLuint carVertBufferID;
 GLuint carColorBufferID;
 
-Mat4f MVP;
-Mat4f M; // model matrix
+Mat4f trackMVP;
+Mat4f carMVP;
+Mat4f carM; // model matrix
+Mat4f trackM; // model matrix
+
 Mat4f V; // view matrix
 Mat4f P; // projection matrix can be left alone
+
 
 int WIN_WIDTH = 800, WIN_HEIGHT = 600;
 
@@ -53,8 +56,8 @@ void setupModelViewProjectionTransform();
 void reloadMVPUniform();
 int main( int, char** );
 // function declarations
-std::vector< Vec3f > trackVerts;
-std::vector< Vec3f > carVerts;
+vector< Vec3f > trackVerts;
+vector< Vec3f > carVerts;
 
 bool left_click = false;
 bool right_click = false;
@@ -63,7 +66,7 @@ double delta_x = 0;
 double delta_y = 0;
 double delta_z = 0;
 
-typedef std::vector< Vec3f > VecV3f;
+typedef vector< Vec3f > VecV3f;
 
 void render()
 {
@@ -73,22 +76,18 @@ void render()
 	glutPostRedisplay();
 }
 
-void loadVec3fFromFile(VecV3f & vecs, std::string const & fileName)
+void loadVec3fFromFile(VecV3f & vecs, string const & fileName)
 {
-	using std::string;
-	using std::stringstream;
-	using std::istream_iterator;
-
-	std::ifstream file(fileName);
+	ifstream file(fileName);
 
 	if (!file)
 	{
-		throw std::runtime_error("Unable to open file.");
+		throw runtime_error("Unable to open file.");
 	}
 
 	string line;
 	size_t index;
-	stringstream ss(std::ios_base::in);
+	stringstream ss(ios_base::in);
 
 	size_t lineNum = 0;
 	vecs.clear();
@@ -125,10 +124,10 @@ void loadVec3fFromFile(VecV3f & vecs, std::string const & fileName)
 
 		if (!ss || !ss.eof() || ss.good())
 		{
-			throw std::runtime_error("Error read file: "
+			throw runtime_error("Error read file: "
 				+ line
 				+ " (line: "
-				+ std::to_string(lineNum)
+				+ to_string(lineNum)
 				+ ")");
 		}
 		else
@@ -144,18 +143,19 @@ void displayFunc()
 	glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
 
 	// Use our shader
-	glUseProgram( basicProgramID );
 
 	// Use VAO that holds buffer bindings
 	// and attribute config of buffers
 
 	// Draw track
+	glUseProgram(trackProgramID);
 	glBindVertexArray(vaoTrackID);
 	GLfloat width = 50;
 	glLineWidth(width);
 	glDrawArrays(GL_LINE_LOOP, 0, trackVerts.size());
 
 	// Draw track
+	glUseProgram(carProgramID);
 	glBindVertexArray(vaoCarID);
 	glDrawArrays(GL_TRIANGLES, 0, carVerts.size());
 
@@ -166,7 +166,9 @@ void displayFunc()
 void keyboardFunc(unsigned char key, int x, int y){
 
 	if (key == 'o')		// Orient view matrix to identity matrix 
+	{
 		V = IdentityMatrix();
+	}
 	if (key == 'r')		// Rotate Mode
 		translate = false;
 	if (key == 't')		// Translate Mode
@@ -243,7 +245,8 @@ void idleFunc()
 {
 	// every frame refresh, rotate quad around y axis by 1 degree
 //	MVP = MVP * RotateAboutYMatrix( 1.0 );
-    M = M * RotateAboutYMatrix( 0.01 );
+	trackM = trackM * RotateAboutYMatrix(0.01);
+	carM = carM * RotateAboutYMatrix(-0.01);
 	render();
 }
 
@@ -260,25 +263,38 @@ void resizeFunc( int width, int height )
     glutPostRedisplay();
 }
 
-void generateIDs()
+void generateCarID(string vsSource, string fsSource)
 {
-	std::string vsSource = loadShaderStringfromFile( "./basic_vs.glsl" );
-	std::string fsSource = loadShaderStringfromFile( "./basic_fs.glsl" );
-	basicProgramID = CreateShaderProgram( vsSource, fsSource );
+	carProgramID = CreateShaderProgram(vsSource, fsSource);
 
 	// load IDs given from OpenGL
-	glGenVertexArrays(1, &vaoTrackID);
-	glGenBuffers(1, &trackVertBufferID);
-	glGenBuffers(1, &trackColorBufferID);
-
 	glGenVertexArrays(1, &vaoCarID);
 	glGenBuffers(1, &carVertBufferID);
 	glGenBuffers(1, &carColorBufferID);
 }
 
+void generateTrackID(string vsSource, string fsSource)
+{
+	trackProgramID = CreateShaderProgram(vsSource, fsSource);
+
+	// load IDs given from OpenGL
+	glGenVertexArrays(1, &vaoTrackID);
+	glGenBuffers(1, &trackVertBufferID);
+	glGenBuffers(1, &trackColorBufferID);
+}
+
+void generateIDs()
+{
+	string vsSource = loadShaderStringfromFile("./basic_vs.glsl");
+	string fsSource = loadShaderStringfromFile("./basic_fs.glsl");
+
+	generateCarID(vsSource, fsSource);
+	generateTrackID(vsSource, fsSource);
+}
 void deleteIDs()
 {
-	glDeleteProgram( basicProgramID );
+	glDeleteProgram(trackProgramID);
+	glDeleteProgram(carProgramID);
 
 	glDeleteVertexArrays(1, &vaoTrackID);
 	glDeleteBuffers(1, &trackVertBufferID);
@@ -306,8 +322,10 @@ void loadProjectionMatrix()
 
 void loadModelViewMatrix()
 {
-    M = UniformScaleMatrix( 0.25 );	// scale Quad First
-    M = TranslateMatrix( 0, 0, -2.0 ) * M;	// translate away from (0,0,0)
+	trackM = UniformScaleMatrix(0.25);	// scale Quad First
+	trackM = TranslateMatrix(0, 0, -2.0) * trackM;	// translate away from (0,0,0)
+	carM = UniformScaleMatrix(0.25);	// scale Quad First
+	carM = TranslateMatrix(0, 0, -2.0) * trackM;	// translate away from (0,0,0)
 
     // view doesn't change, but if it did you would use this
     V = IdentityMatrix();
@@ -315,21 +333,39 @@ void loadModelViewMatrix()
 
 void setupModelViewProjectionTransform()
 {
-	MVP = P * V * M; // transforms vertices from right to left (odd huh?)
+	trackMVP = P * V * trackM; // transforms vertices from right to left (odd huh?)
+	carMVP = P * V * carM; // transforms vertices from right to left (odd huh?)
 }
  
-void reloadMVPUniform()
+void reloadTrackMVPUniform()
 {
-	GLint mvpID = glGetUniformLocation( basicProgramID, "MVP" );
-	
-	glUseProgram( basicProgramID );
-	glUniformMatrix4fv( 	mvpID,		// ID
-				1,		// only 1 matrix
-				GL_TRUE,	// transpose matrix, Mat4f is row major
-				MVP.data()	// pointer to data in Mat4f
-			);
+	GLint mvpID = glGetUniformLocation(trackProgramID, "MVP");
+
+	glUseProgram(trackProgramID);
+	glUniformMatrix4fv(mvpID,		// ID
+		1,		// only 1 matrix
+		GL_TRUE,	// transpose matrix, Mat4f is row major
+		trackMVP.data()	// pointer to data in Mat4f
+		);
 }
 
+void reloadCarMVPUniform()
+{
+	GLint mvpID = glGetUniformLocation(carProgramID, "MVP");
+
+	glUseProgram(carProgramID);
+	glUniformMatrix4fv(mvpID,		// ID
+		1,		// only 1 matrix
+		GL_TRUE,	// transpose matrix, Mat4f is row major
+		carMVP.data()	// pointer to data in Mat4f
+		);
+}
+
+void reloadMVPUniform()
+{
+	reloadCarMVPUniform();
+	reloadTrackMVPUniform();
+}
 void setupTrackVAO()
 {
 	glBindVertexArray(vaoTrackID);
@@ -389,9 +425,9 @@ void setupCarVAO()
 }
 
 // Returns a subdivided vector array that adds another point in between each existing point in vector
-std::vector < Vec3f > subdivide(std::vector < Vec3f > verts)
+vector < Vec3f > subdivide(vector < Vec3f > verts)
 {
-	std::vector < Vec3f > new_verts;
+	vector < Vec3f > new_verts;
 	for (int i = 0; i < verts.size(); i++)
 	{
 		Vec3f const& v1 = verts[i];
@@ -404,9 +440,9 @@ std::vector < Vec3f > subdivide(std::vector < Vec3f > verts)
 }
 
 // Returns a subdivided vector array that offsets each existing point in vector halfway to its next neighbor
-std::vector < Vec3f > offset(std::vector < Vec3f > verts)
+vector < Vec3f > offset(vector < Vec3f > verts)
 {
-	std::vector < Vec3f > new_verts;
+	vector < Vec3f > new_verts;
 	for (int i = 0; i < verts.size(); i++)
 	{
 		Vec3f const& v1 = verts[i];
@@ -418,9 +454,9 @@ std::vector < Vec3f > offset(std::vector < Vec3f > verts)
 }
 
 // Returns a subdivided vector array that goes to the specified depth of subdivision
-std::vector < Vec3f > subdivision(std::vector < Vec3f > original_verts, int depth)
+vector < Vec3f > subdivision(vector < Vec3f > original_verts, int depth)
 {
-	std::vector < Vec3f > new_verts = original_verts;
+	vector < Vec3f > new_verts = original_verts;
 	for (int i = 0; i < depth; i++)
 	{
 		new_verts = subdivide(new_verts);
@@ -435,7 +471,7 @@ float getRandFloat(float low, float high)
 }
 
 // Sets up track vertex buffer from file, subdivide and process vectors to be smooth, Assign colors to the vertex shaders
-void loadTrackBuffer(std::string file_path)
+void loadTrackBuffer(string file_path)
 {
 	loadVec3fFromFile(trackVerts, file_path);
 
@@ -450,7 +486,7 @@ void loadTrackBuffer(std::string file_path)
 		GL_STATIC_DRAW);	// Usage pattern of GPU buffer
 
 	// RGB values for the vertices
-	std::vector<Vec3f> colors;
+	vector<Vec3f> colors;
 	for (int i = 0; i < trackVerts.size(); i++)
 	{
 		float r = getRandFloat(0.50, 1.0);
@@ -467,7 +503,7 @@ void loadTrackBuffer(std::string file_path)
 		GL_STATIC_DRAW);
 }
 
-void loadCarBuffer(std::string file_path)
+void loadCarBuffer(string file_path)
 {
 	loadVec3fFromFile(carVerts, file_path);
 
@@ -478,7 +514,7 @@ void loadCarBuffer(std::string file_path)
 		GL_STATIC_DRAW);	// Usage pattern of GPU buffer
 
 	// RGB values for the vertices
-	std::vector<Vec3f> colors;
+	vector<Vec3f> colors;
 	for (int i = 0; i < carVerts.size(); i++)
 	{
 		float r = getRandFloat(0.50, 1.0);
@@ -495,7 +531,7 @@ void loadCarBuffer(std::string file_path)
 		GL_STATIC_DRAW);
 }
 
-void init(std::string track_file_path, std::string car_file_path)
+void init(string track_file_path, string car_file_path)
 {
 	glEnable( GL_DEPTH_TEST );
 
@@ -546,8 +582,8 @@ int main( int argc, char** argv )
 	glutMouseFunc(mouseButton);
 	glutMotionFunc(mouseMove);
 	glutKeyboardFunc(keyboardFunc);
-	std::string track("C:\\Users\\Albert\\git\\CPSC-587\\Assignment1\\RollerCoaster\\RollerCoaster\\track.txt");
-	std::string car("C:\\Users\\Albert\\git\\CPSC-587\\Assignment1\\RollerCoaster\\RollerCoaster\\car.txt");
+	string track("C:\\Users\\Albert\\git\\CPSC-587\\Assignment1\\RollerCoaster\\RollerCoaster\\track.txt");
+	string car("C:\\Users\\Albert\\git\\CPSC-587\\Assignment1\\RollerCoaster\\RollerCoaster\\car.txt");
 	init(track, car); // our own initialize stuff func
 
 	glutMainLoop();
