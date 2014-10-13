@@ -9,6 +9,11 @@
 #include<GL/glew.h> // include BEFORE glut
 #include<GL/freeglut.h>
 
+#include <glm/gtx/string_cast.hpp>
+#include<glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+
 #include "ShaderTools.h"
 #include "Vec3f.h"
 #include "Mat4f.h"
@@ -16,6 +21,7 @@
 #include <math.h>
 
 using namespace std;
+using namespace glm;
 
 
 
@@ -57,17 +63,17 @@ void setupModelViewProjectionTransform();
 void reloadMVPUniform();
 int main( int, char** );
 // function declarations
-vector< Vec3f > trackVerts;
-vector< Vec3f > carVerts;
+vector< vec3 > trackVerts;
+vector< vec3 > carVerts;
 
 bool left_click = false;
 bool right_click = false;
-bool translate = true;
+bool translate_bool = true;
 double delta_x = 0;
 double delta_y = 0;
 double delta_z = 0;
 
-typedef vector< Vec3f > VecV3f;
+//typedef vector< Vec3f > VecV3f;
 
 void printInfo()
 {
@@ -86,7 +92,7 @@ void render()
 	glutPostRedisplay();
 }
 
-void loadVec3fFromFile(VecV3f & vecs, string const & fileName)
+void loadVec3FromFile(vector<vec3> & vecs, string const & fileName)
 {
 	ifstream file(fileName);
 
@@ -129,20 +135,18 @@ void loadVec3fFromFile(VecV3f & vecs, string const & fileName)
 		ss.str(line);
 		ss.clear();
 
-		Vec3f v;
-		ss >> v;
-
-		if (!ss || !ss.eof() || ss.good())
+		float x, y, z;
+		if ((ss >> x >> y >> z) && (!ss || !ss.eof() || ss.good()))
 		{
 			throw runtime_error("Error read file: "
 				+ line
 				+ " (line: "
-				+ to_string(lineNum)
+				+ std::to_string(lineNum)
 				+ ")");
 		}
 		else
 		{
-			vecs.push_back(v);
+			vecs.push_back(vec3(x,y,z));
 		}
 	}
 	file.close();
@@ -162,8 +166,8 @@ void displayFunc()
 	glBindVertexArray(vaoTrackID);
 	GLfloat width = 50;
 	glLineWidth(width);
+	//glDrawArrays(GL_POINTS, 0, trackVerts.size());
 	glDrawArrays(GL_LINE_LOOP, 0, trackVerts.size());
-	//glDrawArrays(GL_LINE_LOOP, 0, trackVerts.size());
 
 	// Draw track
 	glUseProgram(carProgramID);
@@ -183,9 +187,9 @@ void keyboardFunc(unsigned char key, int x, int y){
 		V = IdentityMatrix();
 	}
 	if (key == 'r')		// Rotate Mode
-		translate = false;
+		translate_bool = false;
 	if (key == 't')		// Translate Mode
-		translate = true;
+		translate_bool = true;
 	render();
 }
 
@@ -196,7 +200,7 @@ void mouseMove(int x, int y)
 		delta_y -= y;
 		delta_x -= x;
 
-		if (translate)
+		if (translate_bool)
 			V = TranslateMatrix(-delta_x / 300, delta_y/500, 0) * V;
 		else
 		{
@@ -333,16 +337,16 @@ void loadModelViewMatrix()
 	trackM = UniformScaleMatrix(1);	// scale Quad First
 	//trackM = TranslateMatrix(0, 0, -2.0) * trackM;	// translate away from (0,0,0)
 
-	Vec3f trackStart = trackVerts.at(0);
-	float translateX = trackStart.x();
-	float translateY = trackStart.z();
-	float translateZ = trackStart.x();
-	cout << "Track start: " << trackStart << endl;
-	//carM = TranslateMatrix(0, 0, -2.0) * carM;	// translate away from (0,0,0)
-	//carM = IdentityMatrix();	// scale Quad First
+	//Vec3f trackStart = trackVerts.at(0);
+	//float translateX = trackStart.x();
+	//float translateY = trackStart.z();
+	//float translateZ = trackStart.x();
+	//cout << "Track start: " << trackStart << endl;
+	////carM = TranslateMatrix(0, 0, -2.0) * carM;	// translate away from (0,0,0)
+	////carM = IdentityMatrix();	// scale Quad First
 	carM = UniformScaleMatrix(.05);	// scale Quad First
 	cout << "CarM: " << carM << endl;
-	carM = TranslateMatrix(translateX, translateY, translateZ) * carM;	// Translate car model matrix to begining of track matrix
+	//carM = TranslateMatrix(translateX, translateY, translateZ) * carM;	// Translate car model matrix to begining of track matrix
 	cout << "CarM: " << carM << endl;
 
     // view doesn't change, but if it did you would use this
@@ -491,12 +495,14 @@ float getRandFloat(float low, float high)
 // Sets up track vertex buffer from file, subdivide and process vectors to be smooth, Assign colors to the vertex shaders
 void loadTrackBuffer(string file_path)
 {
-	loadVec3fFromFile(trackVerts, file_path);
-	trackVerts = subdivision(trackVerts, 3);
+	loadVec3FromFile(trackVerts, file_path);
+	cout << glm::to_string(trackVerts[0]) << endl;
+	cout << value_ptr(trackVerts[0]) << endl;
+	//trackVerts = subdivision(trackVerts, 3);
 
 	glBindBuffer(GL_ARRAY_BUFFER, trackVertBufferID);
 	glBufferData(GL_ARRAY_BUFFER,
-		sizeof(Vec3f) * trackVerts.size(),	// byte size of Vec3f, 4 of them
+		sizeof(vec3) * trackVerts.size(),	// byte size of Vec3f, 4 of them
 		trackVerts.data(),		// pointer (Vec3f*) to contents of verts
 		GL_STATIC_DRAW);	// Usage pattern of GPU buffer
 
@@ -523,7 +529,7 @@ Vec3f center(vector<Vec3f> verts)
 
 void loadCarBuffer(string file_path)
 {
-	loadVec3fFromFile(carVerts, file_path);
+	loadVec3FromFile(carVerts, file_path);
 
 	glBindBuffer(GL_ARRAY_BUFFER, carVertBufferID);
 	glBufferData(GL_ARRAY_BUFFER,
@@ -532,7 +538,7 @@ void loadCarBuffer(string file_path)
 		GL_STATIC_DRAW);	// Usage pattern of GPU buffer
 
 	// Locate center of car
-	carCenter = center(carVerts);
+	//carCenter = center(carVerts);
 
 	// RGB values for the vertices
 	vector<Vec3f> colors;
