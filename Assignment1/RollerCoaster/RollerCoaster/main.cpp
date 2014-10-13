@@ -447,14 +447,14 @@ void setupCarVAO()
 }
 
 // Returns a subdivided vector array that adds another point in between each existing point in vector
-vector < Vec3f > subdivide(vector < Vec3f > verts)
+vector < vec3 > subdivide(vector < vec3 > verts)
 {
-	vector < Vec3f > new_verts;
+	vector < vec3 > new_verts;
 	for (int i = 0; i < verts.size(); i++)
 	{
-		Vec3f const& v1 = verts[i];
-		Vec3f const& v2 = verts[(i + 1) % verts.size()];
-		Vec3f mid = (v1 + v2) * 0.5;
+		vec3 const& v1 = verts[i];
+		vec3 const& v2 = verts[(i + 1) % verts.size()];
+		vec3 mid = (v1 + v2) * 0.5f;
 		new_verts.push_back(v1);
 		new_verts.push_back(mid);
 	}
@@ -462,23 +462,23 @@ vector < Vec3f > subdivide(vector < Vec3f > verts)
 }
 
 // Returns a subdivided vector array that offsets each existing point in vector halfway to its next neighbor
-vector < Vec3f > offset(vector < Vec3f > verts)
+vector < vec3 > offset(vector < vec3 > verts)
 {
-	vector < Vec3f > new_verts;
+	vector < vec3 > new_verts;
 	for (int i = 0; i < verts.size(); i++)
 	{
-		Vec3f const& v1 = verts[i];
-		Vec3f const& v2 = verts[(i + 1) % verts.size()];
-		Vec3f mid = (v1 + v2) * 0.5;
+		vec3 const& v1 = verts[i];
+		vec3 const& v2 = verts[(i + 1) % verts.size()];
+		vec3 mid = (v1 + v2) * 0.5f;
 		new_verts.push_back(mid);
 	}
 	return new_verts;
 }
 
 // Returns a subdivided vector array that goes to the specified depth of subdivision
-vector < Vec3f > subdivision(vector < Vec3f > original_verts, int depth)
+vector < vec3 > subdivision(vector < vec3 > original_verts, int depth)
 {
-	vector < Vec3f > new_verts = original_verts;
+	vector < vec3 > new_verts = original_verts;
 	for (int i = 0; i < depth; i++)
 	{
 		new_verts = subdivide(new_verts);
@@ -498,7 +498,7 @@ void loadTrackBuffer(string file_path)
 	loadVec3FromFile(trackVerts, file_path);
 	cout << glm::to_string(trackVerts[0]) << endl;
 	cout << value_ptr(trackVerts[0]) << endl;
-	//trackVerts = subdivision(trackVerts, 3);
+	trackVerts = subdivision(trackVerts, 3);
 
 	glBindBuffer(GL_ARRAY_BUFFER, trackVertBufferID);
 	glBufferData(GL_ARRAY_BUFFER,
@@ -507,18 +507,18 @@ void loadTrackBuffer(string file_path)
 		GL_STATIC_DRAW);	// Usage pattern of GPU buffer
 
 	// RGB values for the vertices
-	vector<Vec3f> colors;
+	vector<vec3> colors;
 	for (int i = 0; i < trackVerts.size(); i++)
 	{
 		float r = getRandFloat(0.50, 1.0);
 		float g = getRandFloat(0.50, 1.0);
 		float b = getRandFloat(0.50, 1.0);
-		colors.push_back(Vec3f(r, g, b));
+		colors.push_back(vec3(r, g, b));
 	}
 
 	glBindBuffer(GL_ARRAY_BUFFER, trackColorBufferID);
 	glBufferData(GL_ARRAY_BUFFER,
-		sizeof(Vec3f)*colors.size(),
+		sizeof(vec3)*colors.size(),
 		colors.data(),
 		GL_STATIC_DRAW);
 }
@@ -541,18 +541,18 @@ void loadCarBuffer(string file_path)
 	//carCenter = center(carVerts);
 
 	// RGB values for the vertices
-	vector<Vec3f> colors;
+	vector<vec3> colors;
 	for (int i = 0; i < carVerts.size(); i++)
 	{
 		float r = getRandFloat(0.50, 1.0);
 		float g = getRandFloat(0.50, 1.0);
 		float b = getRandFloat(0.50, 1.0);
-		colors.push_back(Vec3f(r, g, b));
+		colors.push_back(vec3(r, g, b));
 	}
 
 	glBindBuffer(GL_ARRAY_BUFFER, carColorBufferID);
 	glBufferData(GL_ARRAY_BUFFER,
-		sizeof(Vec3f)*colors.size(),
+		sizeof(vec3)*colors.size(),
 		colors.data(),
 		GL_STATIC_DRAW);
 }
