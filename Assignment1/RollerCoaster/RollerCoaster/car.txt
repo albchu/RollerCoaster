@@ -1,53 +1,53 @@
 # Top Panel
-2 1 1		# Top Back Right
-2 -1 1		# Top Back Left
--2 1 1		# Top Front Right
+2 1 0.5		# Top Back Right
+2 -1 0.5		# Top Back Left
+-2 1 0.5		# Top Front Right
 
-2 -1 1		# Top Back Left
--2 1 1		# Top Front Right
--2 -1 1		# Top Front Left
+2 -1 0.5		# Top Back Left
+-2 1 0.5		# Top Front Right
+-2 -1 0.5		# Top Front Left
 
 # Right Panel
-2 1 1		# Top Back Right
--2 1 1		# Top Front Right
-2 1 0		# Bottom Back Right
+2 1 0.5		# Top Back Right
+-2 1 0.5		# Top Front Right
+2 1 -0.5		# Bottom Back Right
 
--2 1 1		# Top Front Right
-2 1 0		# Bottom Back Right
--2 1 0		# Bottom Front Right
+-2 1 0.5		# Top Front Right
+2 1 -0.5		# Bottom Back Right
+-2 1 -0.5		# Bottom Front Right
 
 # Left Panel
-2 -1 1		# Top Back Left
--2 -1 1		# Top Front Left
-2 -1 0		# Bottom Back Left
+2 -1 0.5		# Top Back Left
+-2 -1 0.5		# Top Front Left
+2 -1 -0.5		# Bottom Back Left
 
--2 -1 1		# Top Front Left
-2 -1 0		# Bottom Back Left
--2 -1 0		# Bottom Front Left
+-2 -1 0.5		# Top Front Left
+2 -1 -0.5		# Bottom Back Left
+-2 -1 -0.5		# Bottom Front Left
 
 # Bottom Panel
-2 -1 0		# Bottom Back Left
-2 1 0		# Bottom Back Right
--2 -1 0		# Bottom Front Left
+2 -1 -0.5		# Bottom Back Left
+2 1 -0.5		# Bottom Back Right
+-2 -1 -0.5		# Bottom Front Left
 
-2 1 0		# Bottom Back Right
--2 -1 0		# Bottom Front Left
--2 1 0		# Bottom Front Right
+2 1 -0.5		# Bottom Back Right
+-2 -1 -0.5		# Bottom Front Left
+-2 1 -0.5		# Bottom Front Right
 
 # Front Panel
--2 -1 1		# Top Front Left
--2 1 1		# Top Front Right
--2 -1 0		# Bottom Front Left
+-2 -1 0.5		# Top Front Left
+-2 1 0.5		# Top Front Right
+-2 -1 -0.5		# Bottom Front Left
 
--2 1 1		# Top Front Right
--2 -1 0		# Bottom Front Left
--2 1 0		# Bottom Front Right
+-2 1 0.5		# Top Front Right
+-2 -1 -0.5		# Bottom Front Left
+-2 1 -0.5		# Bottom Front Right
 
 # Back Panel
-2 -1 0		# Bottom Back Left
-2 1 0		# Bottom Back Right
-2 1 1		# Top Back Right
+2 -1 -0.5		# Bottom Back Left
+2 1 -0.5		# Bottom Back Right
+2 1 0.5		# Top Back Right
 
-2 -1 1		# Top Back Left
-2 1 1		# Top Back Right
-2 -1 0		# Bottom Back Left
+2 -1 0.5		# Top Back Left
+2 1 0.5		# Top Back Right
+2 -1 -0.5		# Bottom Back Left

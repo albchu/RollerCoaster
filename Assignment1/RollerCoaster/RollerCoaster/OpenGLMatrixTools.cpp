@@ -35,7 +35,8 @@ Mat4f TranslateMatrix( float x, float y, float z )
 			0, 	0, 	1,	z,
 			0, 	0, 	0, 	1
 		};
-
+	std::cout << "x " << x << ", y" << y << ", z " << z << std::endl;
+	std::cout << "trans: " << trans << std::endl;
 	return trans;
 }
 

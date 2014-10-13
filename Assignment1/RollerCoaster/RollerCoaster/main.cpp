@@ -29,6 +29,7 @@ GLuint vaoCarID;
 GLuint carProgramID;
 GLuint carVertBufferID;
 GLuint carColorBufferID;
+Vec3f carCenter;
 
 Mat4f trackMVP;
 Mat4f carMVP;
@@ -67,6 +68,15 @@ double delta_y = 0;
 double delta_z = 0;
 
 typedef vector< Vec3f > VecV3f;
+
+void printInfo()
+{
+	cout << "Using GLEW " << glewGetString(GLEW_VERSION) << endl;
+	cout << "Vendor: " << glGetString(GL_VENDOR) << endl;
+	cout << "Renderer: " << glGetString(GL_RENDERER) << endl;
+	cout << "Version: " << glGetString(GL_VERSION) << endl;
+	cout << "GLSL: " << glGetString(GL_SHADING_LANGUAGE_VERSION) << endl;
+}
 
 void render()
 {
@@ -153,10 +163,13 @@ void displayFunc()
 	GLfloat width = 50;
 	glLineWidth(width);
 	glDrawArrays(GL_LINE_LOOP, 0, trackVerts.size());
+	//glDrawArrays(GL_LINE_LOOP, 0, trackVerts.size());
 
 	// Draw track
 	glUseProgram(carProgramID);
 	glBindVertexArray(vaoCarID);
+	//glDrawArrays(GL_POINTS, 0, carVerts.size());
+	
 	glDrawArrays(GL_TRIANGLES, 0, carVerts.size());
 
 	glutSwapBuffers();
@@ -197,12 +210,7 @@ void mouseMove(int x, int y)
 	if (right_click)
 	{
 		delta_z -= y;
-		if (translate)
-			V = TranslateMatrix(0, 0, delta_z/500) * V;
-		else
-		{
-			V = V * RotateAboutZMatrix(delta_y / 100);
-		}
+		V = TranslateMatrix(0, 0, delta_z/500) * V;
 		delta_z = y;
 	}
 	render();
@@ -245,7 +253,7 @@ void idleFunc()
 {
 	// every frame refresh, rotate quad around y axis by 1 degree
 //	MVP = MVP * RotateAboutYMatrix( 1.0 );
-	trackM = trackM * RotateAboutYMatrix(0.01);
+	//trackM = trackM * RotateAboutYMatrix(0.01);
 	carM = carM * RotateAboutYMatrix(-0.01);
 	render();
 }
@@ -317,15 +325,25 @@ void loadProjectionMatrix()
     P = PerspectiveProjection(  60, // FOV
                                 static_cast<float>(WIN_WIDTH)/WIN_HEIGHT, // Aspect
                                 0.01,   // near plane
-                                5 ); // far plane depth
+                                50 ); // far plane depth
 }
 
 void loadModelViewMatrix()
 {
-	trackM = UniformScaleMatrix(0.25);	// scale Quad First
-	trackM = TranslateMatrix(0, 0, -2.0) * trackM;	// translate away from (0,0,0)
-	carM = UniformScaleMatrix(0.25);	// scale Quad First
-	carM = TranslateMatrix(0, 0, -2.0) * trackM;	// translate away from (0,0,0)
+	trackM = UniformScaleMatrix(1);	// scale Quad First
+	//trackM = TranslateMatrix(0, 0, -2.0) * trackM;	// translate away from (0,0,0)
+
+	Vec3f trackStart = trackVerts.at(0);
+	float translateX = trackStart.x();
+	float translateY = trackStart.z();
+	float translateZ = trackStart.x();
+	cout << "Track start: " << trackStart << endl;
+	//carM = TranslateMatrix(0, 0, -2.0) * carM;	// translate away from (0,0,0)
+	//carM = IdentityMatrix();	// scale Quad First
+	carM = UniformScaleMatrix(.05);	// scale Quad First
+	cout << "CarM: " << carM << endl;
+	carM = TranslateMatrix(translateX, translateY, translateZ) * carM;	// Translate car model matrix to begining of track matrix
+	cout << "CarM: " << carM << endl;
 
     // view doesn't change, but if it did you would use this
     V = IdentityMatrix();
@@ -474,10 +492,7 @@ float getRandFloat(float low, float high)
 void loadTrackBuffer(string file_path)
 {
 	loadVec3fFromFile(trackVerts, file_path);
-
-	cout << "Original verts size is " << trackVerts.size() << endl;
 	trackVerts = subdivision(trackVerts, 3);
-	cout << "Subdivided verts size is " << trackVerts.size() << endl;
 
 	glBindBuffer(GL_ARRAY_BUFFER, trackVertBufferID);
 	glBufferData(GL_ARRAY_BUFFER,
@@ -492,7 +507,6 @@ void loadTrackBuffer(string file_path)
 		float r = getRandFloat(0.50, 1.0);
 		float g = getRandFloat(0.50, 1.0);
 		float b = getRandFloat(0.50, 1.0);
-		cout << r << endl;
 		colors.push_back(Vec3f(r, g, b));
 	}
 
@@ -501,6 +515,10 @@ void loadTrackBuffer(string file_path)
 		sizeof(Vec3f)*colors.size(),
 		colors.data(),
 		GL_STATIC_DRAW);
+}
+Vec3f center(vector<Vec3f> verts)
+{
+	return Vec3f(0, 0, 0);	//Unsure how to get center of object so im going to hack it to start at center
 }
 
 void loadCarBuffer(string file_path)
@@ -513,6 +531,9 @@ void loadCarBuffer(string file_path)
 		carVerts.data(),		// pointer (Vec3f*) to contents of verts
 		GL_STATIC_DRAW);	// Usage pattern of GPU buffer
 
+	// Locate center of car
+	carCenter = center(carVerts);
+
 	// RGB values for the vertices
 	vector<Vec3f> colors;
 	for (int i = 0; i < carVerts.size(); i++)
@@ -520,7 +541,6 @@ void loadCarBuffer(string file_path)
 		float r = getRandFloat(0.50, 1.0);
 		float g = getRandFloat(0.50, 1.0);
 		float b = getRandFloat(0.50, 1.0);
-		cout << r << endl;
 		colors.push_back(Vec3f(r, g, b));
 	}
 
@@ -539,8 +559,9 @@ void init(string track_file_path, string car_file_path)
 
 	generateIDs();
 	setupTrackVAO();
-	setupCarVAO();
 	loadTrackBuffer(track_file_path);
+	
+	setupCarVAO();
 	loadCarBuffer(car_file_path);
 
     loadModelViewMatrix();
@@ -548,14 +569,7 @@ void init(string track_file_path, string car_file_path)
 	setupModelViewProjectionTransform();
 	reloadMVPUniform();
 }
-void printInfo()
-{
-	cout << "Using GLEW " << glewGetString(GLEW_VERSION) << endl;
-	cout << "Vendor: " << glGetString(GL_VENDOR) << endl;
-	cout << "Renderer: " << glGetString(GL_RENDERER) << endl;
-	cout << "Version: " << glGetString(GL_VERSION) << endl;
-	cout << "GLSL: " << glGetString(GL_SHADING_LANGUAGE_VERSION) << endl;
-}
+
 int main( int argc, char** argv )
 {
     glutInit( &argc, argv );
@@ -575,7 +589,6 @@ int main( int argc, char** argv )
 		return -1;
 	}
 	printInfo();
-
     glutDisplayFunc( displayFunc );
 	glutReshapeFunc( resizeFunc );
     glutIdleFunc( idleFunc );		
