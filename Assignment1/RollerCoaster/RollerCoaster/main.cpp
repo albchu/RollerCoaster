@@ -13,6 +13,7 @@
 #include<glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 #include "ShaderTools.h"
 #include "Vec3f.h"
@@ -35,15 +36,15 @@ GLuint vaoCarID;
 GLuint carProgramID;
 GLuint carVertBufferID;
 GLuint carColorBufferID;
-Vec3f carCenter;
+vec3 carCenter;
 
-Mat4f trackMVP;
-Mat4f carMVP;
-Mat4f carM; // model matrix
-Mat4f trackM; // model matrix
+mat4 trackMVP;
+mat4 carMVP;
+mat4 carM; // model matrix
+mat4 trackM; // model matrix
 
-Mat4f V; // view matrix
-Mat4f P; // projection matrix can be left alone
+mat4 V; // view matrix
+mat4 P; // projection matrix can be left alone
 
 
 int WIN_WIDTH = 800, WIN_HEIGHT = 600;
@@ -69,9 +70,9 @@ vector< vec3 > carVerts;
 bool left_click = false;
 bool right_click = false;
 bool translate_bool = true;
-double delta_x = 0;
-double delta_y = 0;
-double delta_z = 0;
+float delta_x = 0;
+float delta_y = 0;
+float delta_z = 0;
 
 //typedef vector< Vec3f > VecV3f;
 
@@ -184,7 +185,7 @@ void keyboardFunc(unsigned char key, int x, int y){
 
 	if (key == 'o')		// Orient view matrix to identity matrix 
 	{
-		V = IdentityMatrix();
+		V = mat4(1.0f);
 	}
 	if (key == 'r')		// Rotate Mode
 		translate_bool = false;
@@ -201,11 +202,11 @@ void mouseMove(int x, int y)
 		delta_x -= x;
 
 		if (translate_bool)
-			V = TranslateMatrix(-delta_x / 300, delta_y/500, 0) * V;
+			V = translate(V, glm::vec3(-delta_x / 300, delta_y / 500, 0));
 		else
 		{
-			V = V * RotateAboutYMatrix(delta_x / 10);
-			V = V * RotateAboutXMatrix(delta_y / 10);
+			V = glm::rotate(V, delta_x / 10, glm::vec3(-1.0f, 0.0f, 0.0f));
+			V = glm::rotate(V, delta_y / 10, glm::vec3(0.0f, 1.0f, 0.0f));
 		}
 
 		delta_x = x;
@@ -214,7 +215,7 @@ void mouseMove(int x, int y)
 	if (right_click)
 	{
 		delta_z -= y;
-		V = TranslateMatrix(0, 0, delta_z/500) * V;
+		V = translate(V, glm::vec3(0, 0, delta_z / 500));
 		delta_z = y;
 	}
 	render();
@@ -258,7 +259,8 @@ void idleFunc()
 	// every frame refresh, rotate quad around y axis by 1 degree
 //	MVP = MVP * RotateAboutYMatrix( 1.0 );
 	//trackM = trackM * RotateAboutYMatrix(0.01);
-	carM = carM * RotateAboutYMatrix(-0.01);
+	carM = glm::rotate(carM, -0.01f, glm::vec3(0.0f, 1.0f, 0.0f));
+	//carM = carM * RotateAboutYMatrix(-0.01);
 	render();
 }
 
@@ -326,31 +328,35 @@ void loadProjectionMatrix()
 	// near Z plane > 0
 	// far Z plane
 
-    P = PerspectiveProjection(  60, // FOV
-                                static_cast<float>(WIN_WIDTH)/WIN_HEIGHT, // Aspect
-                                0.01,   // near plane
-                                50 ); // far plane depth
+    //P = PerspectiveProjection(  60, // FOV
+    //                            static_cast<float>(WIN_WIDTH)/WIN_HEIGHT, // Aspect
+    //                            0.01,   // near plane
+    //                            50 ); // far plane depth
+	P = glm::perspective(60.0f, static_cast<float>(WIN_WIDTH) / WIN_HEIGHT, 0.01f, 1000.f);
 }
 
 void loadModelViewMatrix()
 {
-	trackM = UniformScaleMatrix(1);	// scale Quad First
+	//trackM = UniformScaleMatrix(1);	// scale Quad First
 	//trackM = TranslateMatrix(0, 0, -2.0) * trackM;	// translate away from (0,0,0)
 
-	//Vec3f trackStart = trackVerts.at(0);
-	//float translateX = trackStart.x();
-	//float translateY = trackStart.z();
-	//float translateZ = trackStart.x();
-	//cout << "Track start: " << trackStart << endl;
+	float carScale = 0.1f;
+	vec3 trackStart = trackVerts.at(0);
+	cout << "CarM: " << glm::to_string(carM) << endl;
+	float translateX = trackStart.x;
+	float translateY = trackStart.z;
+	float translateZ = trackStart.x;
+	cout << "Track start: " << glm::to_string(trackStart) << endl;
 	////carM = TranslateMatrix(0, 0, -2.0) * carM;	// translate away from (0,0,0)
 	////carM = IdentityMatrix();	// scale Quad First
-	carM = UniformScaleMatrix(.05);	// scale Quad First
-	cout << "CarM: " << carM << endl;
-	//carM = TranslateMatrix(translateX, translateY, translateZ) * carM;	// Translate car model matrix to begining of track matrix
-	cout << "CarM: " << carM << endl;
+	cout << "CarM: " << glm::to_string(carM) << endl;
+	carM = translate(carM,vec3(translateX, translateY, translateZ));	// Translate car model matrix to begining of track matrix
+	carM = scale(carM, vec3(carScale));	// scale Quad First
+	cout << "CarM: " << glm::to_string(carM) << endl;
+	//cout << "CarM: " << carM << endl;
 
     // view doesn't change, but if it did you would use this
-    V = IdentityMatrix();
+   // V = IdentityMatrix();
 }
 
 void setupModelViewProjectionTransform()
@@ -366,8 +372,8 @@ void reloadTrackMVPUniform()
 	glUseProgram(trackProgramID);
 	glUniformMatrix4fv(mvpID,		// ID
 		1,		// only 1 matrix
-		GL_TRUE,	// transpose matrix, Mat4f is row major
-		trackMVP.data()	// pointer to data in Mat4f
+		GL_FALSE,	// transpose matrix, Mat4f is row major
+		value_ptr(trackMVP)	// pointer to data in Mat4f
 		);
 }
 
@@ -378,8 +384,8 @@ void reloadCarMVPUniform()
 	glUseProgram(carProgramID);
 	glUniformMatrix4fv(mvpID,		// ID
 		1,		// only 1 matrix
-		GL_TRUE,	// transpose matrix, Mat4f is row major
-		carMVP.data()	// pointer to data in Mat4f
+		GL_FALSE,	// transpose matrix, Mat4f is row major
+		value_ptr(carMVP)	// pointer to data in Mat4f
 		);
 }
 
