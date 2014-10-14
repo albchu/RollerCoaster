@@ -46,6 +46,8 @@ mat4 trackM; // model matrix
 mat4 V; // view matrix
 mat4 P; // projection matrix can be left alone
 
+int curIndex = 0; // The vertex immediately behind the car
+int delay = 30;
 
 int WIN_WIDTH = 800, WIN_HEIGHT = 600;
 
@@ -62,10 +64,14 @@ void loadProjectionMatrix();
 void loadModelViewMatrix();
 void setupModelViewProjectionTransform();
 void reloadMVPUniform();
+vec3 center(vector<vec3> verts);
+void moveCarTo(vec3 new_pos);
 int main( int, char** );
+
+
 // function declarations
-vector< vec3 > trackVerts;
-vector< vec3 > carVerts;
+vector< vec3 > track_verts;
+vector< vec3 > car_verts;
 
 bool left_click = false;
 bool right_click = false;
@@ -73,6 +79,8 @@ bool translate_bool = true;
 float delta_x = 0;
 float delta_y = 0;
 float delta_z = 0;
+
+int lastTime;
 
 //typedef vector< Vec3f > VecV3f;
 
@@ -157,28 +165,24 @@ void displayFunc()
 {
 	glClear( GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT );
 
-	// Use our shader
-
-	// Use VAO that holds buffer bindings
-	// and attribute config of buffers
-
 	// Draw track
 	glUseProgram(trackProgramID);
 	glBindVertexArray(vaoTrackID);
 	GLfloat width = 50;
 	glLineWidth(width);
-	//glDrawArrays(GL_POINTS, 0, trackVerts.size());
-	glDrawArrays(GL_LINE_LOOP, 0, trackVerts.size());
+	//glDrawArrays(GL_POINTS, 0, track_verts.size());
+	glDrawArrays(GL_LINE_LOOP, 0, track_verts.size());
 
-	// Draw track
+	// Draw car
 	glUseProgram(carProgramID);
 	glBindVertexArray(vaoCarID);
-	//glDrawArrays(GL_POINTS, 0, carVerts.size());
+	//glDrawArrays(GL_POINTS, 0, car_verts.size());
 	
-	glDrawArrays(GL_TRIANGLES, 0, carVerts.size());
+	glDrawArrays(GL_TRIANGLES, 0, car_verts.size());
 
 	glutSwapBuffers();
 }
+
 
 //Keyboard commands for manipulating the enviorment
 void keyboardFunc(unsigned char key, int x, int y){
@@ -191,6 +195,13 @@ void keyboardFunc(unsigned char key, int x, int y){
 		translate_bool = false;
 	if (key == 't')		// Translate Mode
 		translate_bool = true;
+
+	if (key == 'm')		// Translate Mode
+		moveCarTo(vec3(1, 1, 1));;
+	if (key == 'n')		// Translate Mode
+		moveCarTo(vec3(0, 0, 0));;
+
+
 	render();
 }
 
@@ -259,8 +270,12 @@ void idleFunc()
 	// every frame refresh, rotate quad around y axis by 1 degree
 //	MVP = MVP * RotateAboutYMatrix( 1.0 );
 	//trackM = trackM * RotateAboutYMatrix(0.01);
-	carM = glm::rotate(carM, -0.01f, glm::vec3(0.0f, 1.0f, 0.0f));
+	//carM = glm::rotate(carM, -0.01f, glm::vec3(0.0f, 1.0f, 0.0f));
 	//carM = carM * RotateAboutYMatrix(-0.01);
+	/*int time = glutGet(GLUT_ELAPSED_TIME) - lastTime;
+	cout << "Time: " << time << endl;
+	lastTime = glutGet(GLUT_ELAPSED_TIME);*/
+	
 	render();
 }
 
@@ -305,6 +320,7 @@ void generateIDs()
 	generateCarID(vsSource, fsSource);
 	generateTrackID(vsSource, fsSource);
 }
+
 void deleteIDs()
 {
 	glDeleteProgram(trackProgramID);
@@ -333,6 +349,7 @@ void loadProjectionMatrix()
     //                            0.01,   // near plane
     //                            50 ); // far plane depth
 	P = glm::perspective(60.0f, static_cast<float>(WIN_WIDTH) / WIN_HEIGHT, 0.01f, 1000.f);
+	P = translate(P, vec3(0, 0, -10));
 }
 
 void loadModelViewMatrix()
@@ -341,22 +358,14 @@ void loadModelViewMatrix()
 	//trackM = TranslateMatrix(0, 0, -2.0) * trackM;	// translate away from (0,0,0)
 
 	float carScale = 0.1f;
-	vec3 trackStart = trackVerts.at(0);
-	cout << "CarM: " << glm::to_string(carM) << endl;
+	vec3 trackStart = track_verts.at(curIndex);
 	float translateX = trackStart.x;
-	float translateY = trackStart.z;
-	float translateZ = trackStart.x;
-	cout << "Track start: " << glm::to_string(trackStart) << endl;
-	////carM = TranslateMatrix(0, 0, -2.0) * carM;	// translate away from (0,0,0)
-	////carM = IdentityMatrix();	// scale Quad First
-	cout << "CarM: " << glm::to_string(carM) << endl;
-	carM = translate(carM,vec3(translateX, translateY, translateZ));	// Translate car model matrix to begining of track matrix
-	carM = scale(carM, vec3(carScale));	// scale Quad First
-	cout << "CarM: " << glm::to_string(carM) << endl;
-	//cout << "CarM: " << carM << endl;
+	float translateY = trackStart.y;
+	float translateZ = trackStart.z;
 
-    // view doesn't change, but if it did you would use this
-   // V = IdentityMatrix();
+	carM = scale(carM, vec3(carScale));	// scale Quad First
+	moveCarTo(vec3(translateX, translateY, translateZ));
+	//carM = translate(carM, vec3(translateX, translateY, translateZ));
 }
 
 void setupModelViewProjectionTransform()
@@ -501,20 +510,20 @@ float getRandFloat(float low, float high)
 // Sets up track vertex buffer from file, subdivide and process vectors to be smooth, Assign colors to the vertex shaders
 void loadTrackBuffer(string file_path)
 {
-	loadVec3FromFile(trackVerts, file_path);
-	cout << glm::to_string(trackVerts[0]) << endl;
-	cout << value_ptr(trackVerts[0]) << endl;
-	trackVerts = subdivision(trackVerts, 3);
+	loadVec3FromFile(track_verts, file_path);
 
+	track_verts = subdivision(track_verts, 3);
 	glBindBuffer(GL_ARRAY_BUFFER, trackVertBufferID);
 	glBufferData(GL_ARRAY_BUFFER,
-		sizeof(vec3) * trackVerts.size(),	// byte size of Vec3f, 4 of them
-		trackVerts.data(),		// pointer (Vec3f*) to contents of verts
+		sizeof(vec3) * track_verts.size(),	// byte size of Vec3f, 4 of them
+		track_verts.data(),		// pointer (Vec3f*) to contents of verts
 		GL_STATIC_DRAW);	// Usage pattern of GPU buffer
+
+	carCenter = center(car_verts);
 
 	// RGB values for the vertices
 	vector<vec3> colors;
-	for (int i = 0; i < trackVerts.size(); i++)
+	for (int i = 0; i < track_verts.size(); i++)
 	{
 		float r = getRandFloat(0.50, 1.0);
 		float g = getRandFloat(0.50, 1.0);
@@ -528,27 +537,28 @@ void loadTrackBuffer(string file_path)
 		colors.data(),
 		GL_STATIC_DRAW);
 }
-Vec3f center(vector<Vec3f> verts)
+
+vec3 center(vector<vec3> verts)
 {
-	return Vec3f(0, 0, 0);	//Unsure how to get center of object so im going to hack it to start at center
+	return vec3(0, 0, 0);	//Unsure how to get center of object so im going to hack it to start at center
 }
 
 void loadCarBuffer(string file_path)
 {
-	loadVec3FromFile(carVerts, file_path);
+	loadVec3FromFile(car_verts, file_path);
 
 	glBindBuffer(GL_ARRAY_BUFFER, carVertBufferID);
 	glBufferData(GL_ARRAY_BUFFER,
-		sizeof(Vec3f) * carVerts.size(),	// byte size of Vec3f, 4 of them
-		carVerts.data(),		// pointer (Vec3f*) to contents of verts
+		sizeof(Vec3f) * car_verts.size(),	// byte size of Vec3f, 4 of them
+		car_verts.data(),		// pointer (Vec3f*) to contents of verts
 		GL_STATIC_DRAW);	// Usage pattern of GPU buffer
 
 	// Locate center of car
-	//carCenter = center(carVerts);
+	//carCenter = center(car_verts);
 
 	// RGB values for the vertices
 	vector<vec3> colors;
-	for (int i = 0; i < carVerts.size(); i++)
+	for (int i = 0; i < car_verts.size(); i++)
 	{
 		float r = getRandFloat(0.50, 1.0);
 		float g = getRandFloat(0.50, 1.0);
@@ -582,6 +592,63 @@ void init(string track_file_path, string car_file_path)
 	reloadMVPUniform();
 }
 
+//Moves a car from whatever its current center position to a new position
+void moveCarTo(vec3 new_pos)
+{
+	//cout << "MoveCarTo: \n" << glm::to_string(carCenter) << "\n" <<  glm::to_string(new_pos) << endl;
+	//cout << "\t CarM Before: " << glm::to_string(carM) << endl;
+	carM[3][0] = new_pos.x;
+	carM[3][1] = new_pos.y;
+	carM[3][2] = new_pos.z;
+	//cout << "\t CarM After: " << glm::to_string(carM) << "\n" << endl;
+	carCenter = new_pos;
+	render();
+}
+
+// Returns the next car position along the track given a speed and time
+vec3 next_car_position(float speed, float delata_time_ms)
+{
+	float total_distance = speed * (delata_time_ms / 1000);	// Total distance that must be travelled given the speed and the time passed since last render
+	float distance_travelled = 0;
+	cout << "get_next_car_position: Total distance: " << total_distance << endl;
+	// Get to the proper segment
+	vec3 pos, next_pos;
+	pos = carCenter;
+	//pos = track_verts[curIndex % track_verts.size()];
+	next_pos = track_verts[curIndex % track_verts.size()];
+	while ((distance_travelled + glm::distance(pos, next_pos)) < total_distance)
+	{
+		cout << "\tWhileLoop: Distance between point[" << (curIndex) << " to " << curIndex + 1 << "] is \n\t" << glm::to_string(pos) << "\n\t and \n\t" << glm::to_string(next_pos) << " is " << glm::distance(pos, next_pos) << endl;
+		cout << "\tWhileLoop: Travelled distance: " << distance_travelled << endl;
+		distance_travelled += glm::distance(pos, next_pos);
+		pos = track_verts[curIndex % track_verts.size()];
+		next_pos = track_verts[(curIndex + 1) % track_verts.size()];
+		curIndex++;
+	}
+	cout << "Found correct segment between [" << curIndex - 1 << " and " << curIndex << "]" << endl;
+	cout << "\nDistance between point[" << (curIndex - 1) << " to " << curIndex << "] is \n" << glm::to_string(pos) << "\n\tand \n\t" << glm::to_string(next_pos) << " is " << glm::distance(pos, next_pos) << endl;
+	cout << "\tDistance remaining is : \n\t((" << total_distance << " - " << distance_travelled << ") / " << glm::distance(pos, next_pos) << ")" << " = " 
+		<< ((total_distance - distance_travelled)) << endl;
+	cout << "\tVector is: " << glm::to_string(next_pos - pos) << endl;
+	cout << "\tNormalized vector is: " << glm::to_string(normalize(next_pos - pos)) << endl;
+	vec3 car_pos = normalize(next_pos - pos) * ((total_distance - distance_travelled));
+	car_pos = carCenter + (car_pos ) /*/ glm::distance(pos, next_pos)*/;
+	cout << "\tNew vector is: " << glm::to_string(car_pos) << "\n" << endl;
+	curIndex = curIndex % track_verts.size();
+	return car_pos;
+}
+
+int tmpCounter = 0;
+void timerFunc(int delay)
+{
+	//if (tmpCounter++ < track_verts.size()+3)
+	//moveCarTo(track_verts[tmpCounter++ % track_verts.size()]);
+	//tmpCounter = tmpCounter++ % track_verts.size();
+	moveCarTo(next_car_position(5.0f, delay));
+	glutPostRedisplay();
+	glutTimerFunc(delay, timerFunc, delay);
+}
+
 int main( int argc, char** argv )
 {
     glutInit( &argc, argv );
@@ -603,7 +670,8 @@ int main( int argc, char** argv )
 	printInfo();
     glutDisplayFunc( displayFunc );
 	glutReshapeFunc( resizeFunc );
-    glutIdleFunc( idleFunc );		
+    //glutIdleFunc( idleFunc );		
+	glutTimerFunc(delay, timerFunc, delay);
 	glutMouseFunc(mouseButton);
 	glutMotionFunc(mouseMove);
 	glutKeyboardFunc(keyboardFunc);
