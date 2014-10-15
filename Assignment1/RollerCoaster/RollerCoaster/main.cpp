@@ -20,6 +20,7 @@
 #include "Mat4f.h"
 #include "OpenGLMatrixTools.h"
 #include <math.h>
+#include <algorithm>    // std::max
 
 using namespace std;
 using namespace glm;
@@ -31,6 +32,8 @@ GLuint vaoTrackID;
 GLuint trackProgramID;
 GLuint trackVertBufferID;
 GLuint trackColorBufferID; 
+float track_max_height;
+float track_min_height;
 
 GLuint vaoCarID;
 GLuint carProgramID;
@@ -47,7 +50,9 @@ mat4 V; // view matrix
 mat4 P; // projection matrix can be left alone
 
 int curIndex = 0; // The vertex immediately behind the car
-int delay = 30;
+int delay = 1;
+float GRAVITY = 9.81f;
+float car_scale = 0.5f;
 
 int WIN_WIDTH = 800, WIN_HEIGHT = 600;
 
@@ -168,7 +173,7 @@ void displayFunc()
 	// Draw track
 	glUseProgram(trackProgramID);
 	glBindVertexArray(vaoTrackID);
-	GLfloat width = 50;
+	GLfloat width = 5;
 	glLineWidth(width);
 	//glDrawArrays(GL_POINTS, 0, track_verts.size());
 	glDrawArrays(GL_LINE_LOOP, 0, track_verts.size());
@@ -216,8 +221,8 @@ void mouseMove(int x, int y)
 			V = translate(V, glm::vec3(-delta_x / 300, delta_y / 500, 0));
 		else
 		{
-			V = glm::rotate(V, delta_x / 10, glm::vec3(-1.0f, 0.0f, 0.0f));
-			V = glm::rotate(V, delta_y / 10, glm::vec3(0.0f, 1.0f, 0.0f));
+			V = glm::rotate(V, delta_y / 10, glm::vec3(-1.0f, 0.0f, 0.0f));
+			V = glm::rotate(V, delta_x / 10, glm::vec3(0.0f, 1.0f, 0.0f));
 		}
 
 		delta_x = x;
@@ -263,20 +268,6 @@ void mouseButton(int button, int state, int x, int y)
 	}
 		cout << "Button: " << button << ", State: " << state << endl;
 		printf("Button %s At %d %d\n", (state == GLUT_DOWN) ? "Down" : "Up", x, y);
-}
-
-void idleFunc()
-{
-	// every frame refresh, rotate quad around y axis by 1 degree
-//	MVP = MVP * RotateAboutYMatrix( 1.0 );
-	//trackM = trackM * RotateAboutYMatrix(0.01);
-	//carM = glm::rotate(carM, -0.01f, glm::vec3(0.0f, 1.0f, 0.0f));
-	//carM = carM * RotateAboutYMatrix(-0.01);
-	/*int time = glutGet(GLUT_ELAPSED_TIME) - lastTime;
-	cout << "Time: " << time << endl;
-	lastTime = glutGet(GLUT_ELAPSED_TIME);*/
-	
-	render();
 }
 
 void resizeFunc( int width, int height )
@@ -349,7 +340,7 @@ void loadProjectionMatrix()
     //                            0.01,   // near plane
     //                            50 ); // far plane depth
 	P = glm::perspective(60.0f, static_cast<float>(WIN_WIDTH) / WIN_HEIGHT, 0.01f, 1000.f);
-	P = translate(P, vec3(0, 0, -10));
+	P = translate(P, vec3(-5, -5, -30));
 }
 
 void loadModelViewMatrix()
@@ -357,14 +348,12 @@ void loadModelViewMatrix()
 	//trackM = UniformScaleMatrix(1);	// scale Quad First
 	//trackM = TranslateMatrix(0, 0, -2.0) * trackM;	// translate away from (0,0,0)
 
-	float carScale = 0.1f;
-	vec3 trackStart = track_verts.at(curIndex);
-	float translateX = trackStart.x;
-	float translateY = trackStart.y;
-	float translateZ = trackStart.z;
 
-	carM = scale(carM, vec3(carScale));	// scale Quad First
-	moveCarTo(vec3(translateX, translateY, translateZ));
+	vec3 trackStart = track_verts.at(curIndex);
+	curIndex = 1;
+
+	carM = scale(carM, vec3(car_scale));
+	moveCarTo(trackStart);
 	//carM = translate(carM, vec3(translateX, translateY, translateZ));
 }
 
@@ -507,12 +496,27 @@ float getRandFloat(float low, float high)
 	return (low + static_cast <float> (rand()) / (static_cast <float> (RAND_MAX / (high - low))));
 }
 
+// Sets the max and min y from the vector of vec3s
+void set_max_min_y(vector<vec3> verts, float & max, float & min)
+{
+	for (vec3 vert : verts)
+	{
+		if (vert.y > max)
+			max = vert.y;
+		if (vert.y < min)
+			min = vert.y;
+	}
+}
+
 // Sets up track vertex buffer from file, subdivide and process vectors to be smooth, Assign colors to the vertex shaders
 void loadTrackBuffer(string file_path)
 {
 	loadVec3FromFile(track_verts, file_path);
 
-	track_verts = subdivision(track_verts, 3);
+	track_verts = subdivision(track_verts, 6);
+
+	set_max_min_y(track_verts, track_max_height, track_min_height);
+
 	glBindBuffer(GL_ARRAY_BUFFER, trackVertBufferID);
 	glBufferData(GL_ARRAY_BUFFER,
 		sizeof(vec3) * track_verts.size(),	// byte size of Vec3f, 4 of them
@@ -529,6 +533,7 @@ void loadTrackBuffer(string file_path)
 		float g = getRandFloat(0.50, 1.0);
 		float b = getRandFloat(0.50, 1.0);
 		colors.push_back(vec3(r, g, b));
+		//colors.push_back(vec3(218, 0, 0));
 	}
 
 	glBindBuffer(GL_ARRAY_BUFFER, trackColorBufferID);
@@ -552,9 +557,6 @@ void loadCarBuffer(string file_path)
 		sizeof(Vec3f) * car_verts.size(),	// byte size of Vec3f, 4 of them
 		car_verts.data(),		// pointer (Vec3f*) to contents of verts
 		GL_STATIC_DRAW);	// Usage pattern of GPU buffer
-
-	// Locate center of car
-	//carCenter = center(car_verts);
 
 	// RGB values for the vertices
 	vector<vec3> colors;
@@ -592,15 +594,17 @@ void init(string track_file_path, string car_file_path)
 	reloadMVPUniform();
 }
 
+void updateMatrixColumn(mat4 & matrix, int column, vec3 vector)
+{
+	matrix[column][0] = vector.x;
+	matrix[column][1] = vector.y;
+	matrix[column][2] = vector.z;
+}
+
 //Moves a car from whatever its current center position to a new position
 void moveCarTo(vec3 new_pos)
 {
-	//cout << "MoveCarTo: \n" << glm::to_string(carCenter) << "\n" <<  glm::to_string(new_pos) << endl;
-	//cout << "\t CarM Before: " << glm::to_string(carM) << endl;
-	carM[3][0] = new_pos.x;
-	carM[3][1] = new_pos.y;
-	carM[3][2] = new_pos.z;
-	//cout << "\t CarM After: " << glm::to_string(carM) << "\n" << endl;
+	updateMatrixColumn(carM, 3, new_pos);
 	carCenter = new_pos;
 	render();
 }
@@ -608,9 +612,9 @@ void moveCarTo(vec3 new_pos)
 // Returns the next car position along the track given a speed and time
 vec3 next_car_position(float speed, float delata_time_ms)
 {
-	float total_distance = speed * (delata_time_ms / 1000);	// Total distance that must be travelled given the speed and the time passed since last render
+	float total_distance = speed * (delata_time_ms / 800);	// Total distance that must be travelled given the speed and the time passed since last render
 	float distance_travelled = 0;
-	cout << "get_next_car_position: Total distance: " << total_distance << endl;
+	//cout << "get_next_car_position: Total distance: " << total_distance << endl;
 	// Get to the proper segment
 	vec3 pos, next_pos;
 	pos = carCenter;
@@ -618,36 +622,90 @@ vec3 next_car_position(float speed, float delata_time_ms)
 	next_pos = track_verts[curIndex % track_verts.size()];
 	while ((distance_travelled + glm::distance(pos, next_pos)) < total_distance)
 	{
-		cout << "\tWhileLoop: Distance between point[" << (curIndex) << " to " << curIndex + 1 << "] is \n\t" << glm::to_string(pos) << "\n\t and \n\t" << glm::to_string(next_pos) << " is " << glm::distance(pos, next_pos) << endl;
-		cout << "\tWhileLoop: Travelled distance: " << distance_travelled << endl;
+		//cout << "\tWhileLoop: Distance between point[" << (curIndex) << " to " << curIndex + 1 << "] is \n\t" << glm::to_string(pos) << "\n\t and \n\t" << glm::to_string(next_pos) << " is " << glm::distance(pos, next_pos) << endl;
+		//cout << "\tWhileLoop: Travelled distance: " << distance_travelled << endl;
 		distance_travelled += glm::distance(pos, next_pos);
 		pos = track_verts[curIndex % track_verts.size()];
 		next_pos = track_verts[(curIndex + 1) % track_verts.size()];
 		curIndex++;
 	}
-	cout << "Found correct segment between [" << curIndex - 1 << " and " << curIndex << "]" << endl;
-	cout << "\nDistance between point[" << (curIndex - 1) << " to " << curIndex << "] is \n" << glm::to_string(pos) << "\n\tand \n\t" << glm::to_string(next_pos) << " is " << glm::distance(pos, next_pos) << endl;
-	cout << "\tDistance remaining is : \n\t((" << total_distance << " - " << distance_travelled << ") / " << glm::distance(pos, next_pos) << ")" << " = " 
-		<< ((total_distance - distance_travelled)) << endl;
-	cout << "\tVector is: " << glm::to_string(next_pos - pos) << endl;
-	cout << "\tNormalized vector is: " << glm::to_string(normalize(next_pos - pos)) << endl;
+	//cout << "Found correct segment between [" << curIndex - 1 << " and " << curIndex << "]" << endl;
+	//cout << "\nDistance between point[" << (curIndex - 1) << " to " << curIndex << "] is \n" << glm::to_string(pos) << "\n\tand \n\t" << glm::to_string(next_pos) << " is " << glm::distance(pos, next_pos) << endl;
+	//cout << "\tDistance remaining is : \n\t((" << total_distance << " - " << distance_travelled << ") / " << glm::distance(pos, next_pos) << ")" << " = " 
+	//	<< ((total_distance - distance_travelled)) << endl;
+	//cout << "\tVector is: " << glm::to_string(next_pos - pos) << endl;
+	//cout << "\tNormalized vector is: " << glm::to_string(normalize(next_pos - pos)) << endl;
 	vec3 car_pos = normalize(next_pos - pos) * ((total_distance - distance_travelled));
-	car_pos = carCenter + (car_pos ) /*/ glm::distance(pos, next_pos)*/;
-	cout << "\tNew vector is: " << glm::to_string(car_pos) << "\n" << endl;
+	car_pos = carCenter + car_pos;
+	//cout << "\tNew vector is: " << glm::to_string(car_pos) << "\n" << endl;
 	curIndex = curIndex % track_verts.size();
 	return car_pos;
 }
 
-int tmpCounter = 0;
+float get_speed()
+{
+	int speed_scalar = 3;
+	return (glm::sqrt(2 * GRAVITY * (track_max_height - carCenter.y)) + 2) * speed_scalar;
+}
+
+// Assumption: curIndex is set at the index immediately in front of where ever carCenter is at.
+void set_tnb_frame(float speed, mat4 & modelMatrix, vector<vec3> & verts, int & index)
+{
+	//cout << "CurIndex is: " << curIndex << endl;
+	//cout << "set_car_rotation START" << endl;
+	vec3 p1 = verts[(index - 1) % verts.size()];
+	vec3 point = verts[index % verts.size()];
+	vec3 p3 = verts[(index + 1) % verts.size()];
+
+	// Compare the length of segment curIndex - 1 to curIndex, and length of segment curIndex to curIndex + 1
+	float seg1 = glm::distance(p1, point);
+	float seg2 = glm::distance(point, p3);
+	float max_len = std::min(seg1, seg2);
+
+	vec3 point_before = point + normalize(p3 - point) * max_len;
+	vec3 point_after = point + normalize(p1 - point) * max_len;
+	
+	//cout << "p1 \t" << glm::to_string(p1) << endl;
+	//cout << "point \t" << glm::to_string(point) << endl;
+	//cout << "p3 \t" << glm::to_string(p3) << endl;
+	//cout << "seg1 \t" << glm::to_string(seg1) << endl;
+	//cout << "seg2 \t" << glm::to_string(seg2) << endl;
+	//cout << "max_len \t" << glm::to_string(max_len) << endl;
+
+	//cout << "point_before \t" << glm::to_string(point_before) << endl;
+	//cout << "point_after \t" << glm::to_string(point_after) << endl;
+
+	float c = length(point_after - point);
+	float h = length((point_after - (point * 2.f) + point_before));
+	float radius = (pow(c, 2) + (4 * pow(h, 2))) / (8 * h);
+
+	vec3 gravity_vector = vec3(0, 1, 0);
+	vec3 tangent = normalize((point_after - point) * 0.5f);
+	vec3 normal = normalize(((pow(speed,2) / radius) * normalize((point_after - (point * 2.f) + point_before) * 0.25f)) + gravity_vector);
+	vec3 binormal = normalize(cross(tangent, normal));
+	updateMatrixColumn(modelMatrix, 0, tangent);
+	updateMatrixColumn(modelMatrix, 1, normal);
+	updateMatrixColumn(modelMatrix, 2, binormal);
+	cout << "set_car_rotation END\n" << endl;
+}
+
 void timerFunc(int delay)
 {
-	//if (tmpCounter++ < track_verts.size()+3)
-	//moveCarTo(track_verts[tmpCounter++ % track_verts.size()]);
-	//tmpCounter = tmpCounter++ % track_verts.size();
-	moveCarTo(next_car_position(5.0f, delay));
+	float speed = get_speed();
+	moveCarTo(next_car_position(speed, delay));
+	set_tnb_frame(speed, carM, track_verts, curIndex);
+	carM = scale(carM, vec3(car_scale));
+	//V = glm::rotate(V, 0.1f, glm::vec3(0.0f, 1.0f, 0.0f));
+
 	glutPostRedisplay();
 	glutTimerFunc(delay, timerFunc, delay);
 }
+
+//void idleFunc()
+//{
+//	carM = glm::rotate(carM, 0.1f, glm::vec3(0.0f, 1.0f, 0.0f));
+//	trackM = glm::rotate(trackM, 0.1f, glm::vec3(0.0f, 1.0f, 0.0f));
+//}
 
 int main( int argc, char** argv )
 {
@@ -670,15 +728,15 @@ int main( int argc, char** argv )
 	printInfo();
     glutDisplayFunc( displayFunc );
 	glutReshapeFunc( resizeFunc );
-    //glutIdleFunc( idleFunc );		
 	glutTimerFunc(delay, timerFunc, delay);
+	//glutIdleFunc(idleFunc);
 	glutMouseFunc(mouseButton);
 	glutMotionFunc(mouseMove);
 	glutKeyboardFunc(keyboardFunc);
 	string track("C:\\Users\\Albert\\git\\CPSC-587\\Assignment1\\RollerCoaster\\RollerCoaster\\track.txt");
 	string car("C:\\Users\\Albert\\git\\CPSC-587\\Assignment1\\RollerCoaster\\RollerCoaster\\car.txt");
 	init(track, car); // our own initialize stuff func
-
+	cout << "Track Verts total size is: " << track_verts.size() << endl;
 	glutMainLoop();
 
 	// clean up after loop
