@@ -16,9 +16,6 @@
 #include <glm/gtc/matrix_transform.hpp>
 
 #include "ShaderTools.h"
-#include "Vec3f.h"
-#include "Mat4f.h"
-#include "OpenGLMatrixTools.h"
 #include <math.h>
 #include <algorithm>    // std::max
 
@@ -722,7 +719,7 @@ void loadCarBuffer(string file_path)
 	carCenter = center(car_verts);
 	glBindBuffer(GL_ARRAY_BUFFER, carVertBufferID);
 	glBufferData(GL_ARRAY_BUFFER,
-		sizeof(Vec3f) * car_verts.size(),	// byte size of Vec3f, 4 of them
+		sizeof(vec3) * car_verts.size(),	// byte size of Vec3f, 4 of them
 		car_verts.data(),		// pointer (Vec3f*) to contents of verts
 		GL_STATIC_DRAW);	// Usage pattern of GPU buffer
 

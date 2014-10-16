@@ -71,20 +71,14 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
-    <ClCompile Include="Mat4f.cpp" />
-    <ClCompile Include="OpenGLMatrixTools.cpp" />
     <ClCompile Include="ShaderTools.cpp" />
-    <ClCompile Include="Vec3f.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="basic_fs.glsl" />
     <None Include="basic_vs.glsl" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Mat4f.h" />
-    <ClInclude Include="OpenGLMatrixTools.h" />
     <ClInclude Include="ShaderTools.h" />
-    <ClInclude Include="Vec3f.h" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="car.txt" />

@@ -18,16 +18,7 @@
     <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="Mat4f.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="OpenGLMatrixTools.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="ShaderTools.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Vec3f.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
@@ -40,16 +31,7 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Mat4f.h">
-      <Filter>Source Files</Filter>
-    </ClInclude>
-    <ClInclude Include="OpenGLMatrixTools.h">
-      <Filter>Source Files</Filter>
-    </ClInclude>
     <ClInclude Include="ShaderTools.h">
-      <Filter>Source Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Vec3f.h">
       <Filter>Source Files</Filter>
     </ClInclude>
   </ItemGroup>
