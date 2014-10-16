@@ -45,6 +45,7 @@
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>C:\Users\Albert\Documents\OpenGL\glew-1.11.0\include;C:\Users\Albert\Documents\OpenGL\glfw-3.0.4.bin.WIN32\include;C:\Users\Albert\Documents\OpenGL\glut-3.7.6-bin;C:\Users\Albert\Documents\OpenGL\freeglut-2.8.1\include;C:\Users\Albert\Documents\OpenGL\glm;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <SuppressStartupBanner>false</SuppressStartupBanner>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
@@ -60,6 +61,7 @@
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>C:\Users\Albert\Documents\OpenGL\glew-1.11.0\include;C:\Users\Albert\Documents\OpenGL\glfw-3.0.4.bin.WIN32\include;C:\Users\Albert\Documents\OpenGL\glut-3.7.6-bin;C:\Users\Albert\Documents\OpenGL\freeglut-2.8.1\include;C:\Users\Albert\Documents\OpenGL\glm;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <SuppressStartupBanner>false</SuppressStartupBanner>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>true</GenerateDebugInformation>
