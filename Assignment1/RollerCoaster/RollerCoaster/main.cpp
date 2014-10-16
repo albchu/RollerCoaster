@@ -25,11 +25,14 @@
 using namespace std;
 using namespace glm;
 
-
+GLuint structProgramID;
+GLuint vaoStructID;
+GLuint structVertBufferID;
+GLuint structColorBufferID;
 
 // Could store these in some data structure
-GLuint vaoTrackID;
 GLuint trackProgramID;
+GLuint vaoTrackID;
 GLuint trackVertBufferID;
 GLuint trackColorBufferID; 
 float track_max_height;
@@ -70,12 +73,18 @@ void loadModelViewMatrix();
 void setupModelViewProjectionTransform();
 void reloadMVPUniform();
 vec3 center(vector<vec3> verts);
+void set_tnb_frame(float speed, mat4 & modelMatrix, vector<vec3> & verts, int & index);
 void moveCarTo(vec3 new_pos);
+vec3 getMatrixColumn(mat4 matrix, int column);
+void updateMatrixColumn(mat4 & matrix, int column, vec3 vector);
+float get_speed(vec3 position);
 int main( int, char** );
 
 
 // function declarations
 vector< vec3 > track_verts;
+vector< vec3 > rail_verts;	// This is what is going to end up being rendered for the track
+vector< vec3 > struct_verts;	// Roller coaster supports
 vector< vec3 > car_verts;
 
 bool left_click = false;
@@ -176,7 +185,14 @@ void displayFunc()
 	GLfloat width = 5;
 	glLineWidth(width);
 	//glDrawArrays(GL_POINTS, 0, track_verts.size());
-	glDrawArrays(GL_LINE_LOOP, 0, track_verts.size());
+	glDrawArrays(GL_LINE_LOOP, 0, rail_verts.size());
+
+	// Draw Struct
+	glBindVertexArray(vaoStructID);
+	width = 25;
+	glLineWidth(width);
+	//glDrawArrays(GL_POINTS, 0, track_verts.size());
+	glDrawArrays(GL_LINE_LOOP, 0, struct_verts.size());
 
 	// Draw car
 	glUseProgram(carProgramID);
@@ -303,6 +319,16 @@ void generateTrackID(string vsSource, string fsSource)
 	glGenBuffers(1, &trackColorBufferID);
 }
 
+void generateStructID(string vsSource, string fsSource)
+{
+	structProgramID = CreateShaderProgram(vsSource, fsSource);
+
+	// load IDs given from OpenGL
+	glGenVertexArrays(1, &vaoStructID);
+	glGenBuffers(1, &structVertBufferID);
+	glGenBuffers(1, &structColorBufferID);
+}
+
 void generateIDs()
 {
 	string vsSource = loadShaderStringfromFile("./basic_vs.glsl");
@@ -310,6 +336,7 @@ void generateIDs()
 
 	generateCarID(vsSource, fsSource);
 	generateTrackID(vsSource, fsSource);
+	generateStructID(vsSource, fsSource);
 }
 
 void deleteIDs()
@@ -320,6 +347,10 @@ void deleteIDs()
 	glDeleteVertexArrays(1, &vaoTrackID);
 	glDeleteBuffers(1, &trackVertBufferID);
 	glDeleteBuffers(1, &trackColorBufferID);
+
+	glDeleteVertexArrays(1, &vaoStructID);
+	glDeleteBuffers(1, &structVertBufferID);
+	glDeleteBuffers(1, &structColorBufferID);
 
 	glDeleteVertexArrays(1, &vaoCarID);
 	glDeleteBuffers(1, &carVertBufferID);
@@ -392,6 +423,37 @@ void reloadMVPUniform()
 	reloadCarMVPUniform();
 	reloadTrackMVPUniform();
 }
+
+
+void setupStructVAO()
+{
+	glBindVertexArray(vaoStructID);
+
+	glEnableVertexAttribArray(0); // match layout # in shader
+	glBindBuffer(GL_ARRAY_BUFFER, structVertBufferID);
+	glVertexAttribPointer(
+		0,		// attribute layout # above
+		3,		// # of components (ie XYZ )
+		GL_FLOAT,	// type of components
+		GL_FALSE,	// need to be normalized?
+		0,		// stride
+		(void*)0	// array buffer offset
+		);
+
+	glEnableVertexAttribArray(1); // match layout # in shader
+	glBindBuffer(GL_ARRAY_BUFFER, structColorBufferID);
+	glVertexAttribPointer(
+		1,		// attribute layout # above
+		3,		// # of components (ie XYZ )
+		GL_FLOAT,	// type of components
+		GL_FALSE,	// need to be normalized?
+		0,		// stride
+		(void*)0	// array buffer offset
+		);
+
+	glBindVertexArray(0); // reset to default		
+}
+
 void setupTrackVAO()
 {
 	glBindVertexArray(vaoTrackID);
@@ -508,32 +570,138 @@ void set_max_min_y(vector<vec3> verts, float & max, float & min)
 	}
 }
 
-// Sets up track vertex buffer from file, subdivide and process vectors to be smooth, Assign colors to the vertex shaders
-void loadTrackBuffer(string file_path)
+// Based on some given track, constructs a vector of rail points at some offset
+void set_track_rails(vector<vec3> & track, vector<vec3> & rails)
 {
-	loadVec3FromFile(track_verts, file_path);
+	vector<vec3> in_rail;	//List of inside railling points
+	vector<vec3> out_rail;	//List of outside railling points
+	
+	//int track_index = 0;
 
-	track_verts = subdivision(track_verts, 6);
+	float rail_offset = 0.9f;
+	for (int i = 0; i < track.size(); i++)
+	{
+		float speed = get_speed(track[i]) / 4;
+		mat4 matrix;
+		set_tnb_frame(speed, matrix, track, i);
+		vec3 binormal = getMatrixColumn(matrix, 1);
+		vec3 in_vert = track[i] + (binormal * rail_offset);
+		vec3 out_vert = track[i] - (binormal * rail_offset);
 
-	set_max_min_y(track_verts, track_max_height, track_min_height);
+		in_rail.push_back(in_vert);
+		out_rail.push_back(out_vert);
+	}
 
-	glBindBuffer(GL_ARRAY_BUFFER, trackVertBufferID);
+	//Order the verts in a way that will render nicely with gl_line_loop
+	for (int i = 0; i < track.size(); i++)
+	{
+		vec3 in1 = in_rail[i];
+		vec3 in2 = in_rail[(i + 1) % track.size()];
+		vec3 out1 = out_rail[i];
+		vec3 out2 = out_rail[(i + 1) % track.size()];
+		rails.push_back(in2);
+		rails.push_back(in1);
+
+		rails.push_back(in1);
+		rails.push_back(out1);
+
+		rails.push_back(out1);
+		rails.push_back(out2);
+
+		rails.push_back(out2);
+		rails.push_back(in2);
+	}
+}
+
+// Based on some given track, constructs a vector of rail points at some offset
+void set_rail_structs(vector<vec3> & rails, vector<vec3> & structs, int track_min)
+{
+	int struct_offset = 15;
+	float struct_len = track_min + 15.f;	//This is how far the rollercoaster track appears off the ground
+	for (int i = 0; i < rails.size(); i += struct_offset)
+	{
+		vec3 strut_rail = rails[i % rails.size()];
+		vec3 strut_ground = vec3(strut_rail.x, -struct_len, strut_rail.z);
+		
+		structs.push_back(strut_ground);
+		structs.push_back(strut_rail);
+
+		structs.push_back(strut_rail);
+		structs.push_back(strut_ground);
+	}
+}
+
+
+vec3 getMatrixColumn(mat4 matrix, int column)
+{
+	return vec3(matrix[column][0], matrix[column][1], matrix[column][2]);
+}
+
+// Sets up track vertex buffer from file, subdivide and process vectors to be smooth, Assign colors to the vertex shaders
+void loadStructBuffer()
+{
+	//loadVec3FromFile(track_verts, file_path);
+
+	//track_verts = subdivision(track_verts, 3);
+
+	//set_max_min_y(track_verts, track_max_height, track_min_height);
+
+	//set_track_rails(track_verts, rail_verts);
+	set_rail_structs(rail_verts, struct_verts, track_min_height);
+
+	glBindBuffer(GL_ARRAY_BUFFER, structVertBufferID);
 	glBufferData(GL_ARRAY_BUFFER,
-		sizeof(vec3) * track_verts.size(),	// byte size of Vec3f, 4 of them
-		track_verts.data(),		// pointer (Vec3f*) to contents of verts
+		sizeof(vec3) * struct_verts.size(),	// byte size of Vec3f, 4 of them
+		struct_verts.data(),		// pointer (Vec3f*) to contents of verts
 		GL_STATIC_DRAW);	// Usage pattern of GPU buffer
 
 	carCenter = center(car_verts);
 
 	// RGB values for the vertices
 	vector<vec3> colors;
-	for (int i = 0; i < track_verts.size(); i++)
+	for (int i = 0; i < struct_verts.size(); i++)
 	{
-		float r = getRandFloat(0.50, 1.0);
-		float g = getRandFloat(0.50, 1.0);
-		float b = getRandFloat(0.50, 1.0);
+		float r = getRandFloat(0.30, 1.0);
+		float g = getRandFloat(0.60, 1.0);
+		float b = getRandFloat(0.70, 1.0);
 		colors.push_back(vec3(r, g, b));
 		//colors.push_back(vec3(218, 0, 0));
+	}
+
+	glBindBuffer(GL_ARRAY_BUFFER, structColorBufferID);
+	glBufferData(GL_ARRAY_BUFFER,
+		sizeof(vec3)*colors.size(),
+		colors.data(),
+		GL_STATIC_DRAW);
+}
+
+// Sets up track vertex buffer from file, subdivide and process vectors to be smooth, Assign colors to the vertex shaders
+void loadTrackBuffer(string file_path)
+{
+	loadVec3FromFile(track_verts, file_path);
+
+	track_verts = subdivision(track_verts, 3);
+
+	set_max_min_y(track_verts, track_max_height, track_min_height);
+
+	set_track_rails(track_verts, rail_verts);
+	//set_rail_structs(rail_verts, struct_verts, track_min_height);
+
+	glBindBuffer(GL_ARRAY_BUFFER, trackVertBufferID);
+	glBufferData(GL_ARRAY_BUFFER,
+		sizeof(vec3) * rail_verts.size(),	// byte size of Vec3f, 4 of them
+		rail_verts.data(),		// pointer (Vec3f*) to contents of verts
+		GL_STATIC_DRAW);	// Usage pattern of GPU buffer
+
+	// RGB values for the vertices
+	vector<vec3> colors;
+	for (int i = 0; i < rail_verts.size(); i++)
+	{
+		//float r = getRandFloat(0.50, 1.0);
+		//float g = getRandFloat(0.50, 1.0);
+		//float b = getRandFloat(0.50, 1.0);
+		//colors.push_back(vec3(r, g, b));
+		colors.push_back(vec3(218, 0, 0));
 	}
 
 	glBindBuffer(GL_ARRAY_BUFFER, trackColorBufferID);
@@ -551,7 +719,7 @@ vec3 center(vector<vec3> verts)
 void loadCarBuffer(string file_path)
 {
 	loadVec3FromFile(car_verts, file_path);
-
+	carCenter = center(car_verts);
 	glBindBuffer(GL_ARRAY_BUFFER, carVertBufferID);
 	glBufferData(GL_ARRAY_BUFFER,
 		sizeof(Vec3f) * car_verts.size(),	// byte size of Vec3f, 4 of them
@@ -562,9 +730,9 @@ void loadCarBuffer(string file_path)
 	vector<vec3> colors;
 	for (int i = 0; i < car_verts.size(); i++)
 	{
-		float r = getRandFloat(0.50, 1.0);
-		float g = getRandFloat(0.50, 1.0);
-		float b = getRandFloat(0.50, 1.0);
+		float r = getRandFloat(0, 1.0);
+		float g = getRandFloat(0.0, 1.0);
+		float b = getRandFloat(1.0, 1.0);
 		colors.push_back(vec3(r, g, b));
 	}
 
@@ -584,6 +752,8 @@ void init(string track_file_path, string car_file_path)
 	generateIDs();
 	setupTrackVAO();
 	loadTrackBuffer(track_file_path);
+	setupStructVAO();
+	loadStructBuffer();
 	
 	setupCarVAO();
 	loadCarBuffer(car_file_path);
@@ -642,10 +812,10 @@ vec3 next_car_position(float speed, float delata_time_ms)
 	return car_pos;
 }
 
-float get_speed()
+float get_speed(vec3 position)
 {
 	int speed_scalar = 3;
-	return (glm::sqrt(2 * GRAVITY * (track_max_height - carCenter.y)) + 2) * speed_scalar;
+	return (glm::sqrt(2 * GRAVITY * (track_max_height - position.y)) + 2) * speed_scalar;
 }
 
 // Assumption: curIndex is set at the index immediately in front of where ever carCenter is at.
@@ -684,14 +854,14 @@ void set_tnb_frame(float speed, mat4 & modelMatrix, vector<vec3> & verts, int & 
 	vec3 normal = normalize(((pow(speed,2) / radius) * normalize((point_after - (point * 2.f) + point_before) * 0.25f)) + gravity_vector);
 	vec3 binormal = normalize(cross(tangent, normal));
 	updateMatrixColumn(modelMatrix, 0, tangent);
-	updateMatrixColumn(modelMatrix, 1, normal);
-	updateMatrixColumn(modelMatrix, 2, binormal);
-	cout << "set_car_rotation END\n" << endl;
+	updateMatrixColumn(modelMatrix, 2, normal);
+	updateMatrixColumn(modelMatrix, 1, binormal);
+	//cout << "set_car_rotation END\n" << endl;
 }
 
 void timerFunc(int delay)
 {
-	float speed = get_speed();
+	float speed = get_speed(carCenter);
 	moveCarTo(next_car_position(speed, delay));
 	set_tnb_frame(speed, carM, track_verts, curIndex);
 	carM = scale(carM, vec3(car_scale));
