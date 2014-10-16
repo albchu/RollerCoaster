@@ -744,10 +744,10 @@ void init(std::string track_file_path, std::string car_file_path)
 	glEnable( GL_DEPTH_TEST );
 
 	// SETUP SHADERS, BUFFERS, VAOs
-
 	generateIDs();
 	setupTrackVAO();
 	loadTrackBuffer(track_file_path);
+
 	setupStructVAO();
 	loadStructBuffer();
 	
@@ -844,10 +844,10 @@ void set_tnb_frame(float speed, glm::mat4 & modelMatrix, std::vector<glm::vec3> 
 	float c = glm::length(point_after - point);
 	float h = glm::length((point_after - (point * 2.f) + point_before));
 	float radius = (pow(c, 2) + (4 * pow(h, 2))) / (8 * h);
-
+	float speed_squared = (pow(speed,2));
 	glm::vec3 gravity_vector = glm::vec3(0, 1, 0);
 	glm::vec3 tangent = glm::normalize((point_after - point) * 0.5f);
-	glm::vec3 normal = glm::normalize(((pow(speed,2) / radius) * glm::normalize((point_after - (point * 2.f) + point_before) * 0.25f)) + gravity_vector);
+	glm::vec3 normal = glm::normalize(((speed_squared / radius) * glm::normalize((point_after - (point * 2.f) + point_before) * 0.25f)) + gravity_vector);
 	glm::vec3 binormal = glm::normalize(glm::cross(tangent, normal));
 	updateMatrixColumn(modelMatrix, 0, tangent);
 	updateMatrixColumn(modelMatrix, 2, normal);
@@ -899,8 +899,8 @@ int main( int argc, char** argv )
 	glutMouseFunc(mouseButton);
 	glutMotionFunc(mouseMove);
 	glutKeyboardFunc(keyboardFunc);
-	std::string track("C:\\Users\\Albert\\git\\CPSC-587\\Assignment1\\RollerCoaster\\RollerCoaster\\track.txt");
-	std::string car("C:\\Users\\Albert\\git\\CPSC-587\\Assignment1\\RollerCoaster\\RollerCoaster\\car.txt");
+	std::string track("track.txt");
+	std::string car("car.txt");
 	init(track, car); // our own initialize stuff func
 	std::cout << "Track Verts total size is: " << track_verts.size() << std::endl;
 	glutMainLoop();
