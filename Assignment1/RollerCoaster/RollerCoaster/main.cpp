@@ -91,6 +91,7 @@ float delta_x = 0;
 float delta_y = 0;
 float delta_z = 0;
 
+int slowdown = 1; // This variable will slow down the roller coaster over time until it stops.
 int lastTime;
 
 //typedef std::vector< Vec3f > VecV3f;
@@ -803,7 +804,7 @@ glm::vec3 next_car_position(float speed, float delata_time_ms)
 float get_speed(glm::vec3 position)
 {
 	int speed_scalar = 3;
-	return (glm::sqrt(2 * GRAVITY * (track_max_height - position.y)) + 2) * speed_scalar;
+	return (glm::sqrt(2 * GRAVITY * (track_max_height - position.y)) + 2) * speed_scalar / slowdown;
 }
 
 // Assumption: curIndex is set at the index immediately in front of where ever carCenter is at.
@@ -832,7 +833,6 @@ void set_tnb_frame(float speed, glm::mat4 & modelMatrix, std::vector<glm::vec3> 
 	updateMatrixColumn(modelMatrix, 0, tangent);
 	updateMatrixColumn(modelMatrix, 1, normal);
 	updateMatrixColumn(modelMatrix, 2, binormal);
-	//std::cout << "set_car_rotation END\n" << std::endl;
 }
 
 void timerFunc(int delay)

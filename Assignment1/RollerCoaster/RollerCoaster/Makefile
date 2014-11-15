@@ -4,7 +4,7 @@ CFLAGS=-c -std=c++0x -O3 -Wall
 LDFLAGS=-lGLEW -lGL -lglut -L/usr/X11R6/lib 
 SOURCES=main.cpp ShaderTools.cpp
 OBJECTS=$(SOURCES:.cpp=.o)
-EXECUTABLE=Tut07
+EXECUTABLE=RollerCoaster
 
 all: $(SOURCES) $(EXECUTABLE)
 
