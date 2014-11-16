@@ -19,7 +19,6 @@
 #include<GL/glut.h>
 
 #include "ShaderTools.h"
-#include "Vec3f.h"
 
 #include <glm/gtx/string_cast.hpp>
 #include<glm/glm.hpp>
@@ -43,12 +42,18 @@ glm::mat4 M;
 glm::mat4 V;
 glm::mat4 P;
 
-double mass = 5;
-double gravity = 9.81;
-double spring_constant = 5;
-double velocity_prev = 0;
-double initial_position = 1;
-int delay = 500;
+float mass = 3;
+//float gravity = 9.81;
+float spring_constant = 10.0f;
+float spring_friction = 50.0f;
+glm::vec3 velocity_prev;
+glm::vec3 velocity_curr;
+float initial_position = 2;
+int delay = 10;
+glm::vec3 spring_anchor_position = glm::vec3(0.f, 2.f, -10.f);
+glm::vec3 initial_mass_position = glm::vec3(5.f, 0.f, -10.f);
+glm::vec3 mass_previous_position;
+float total_spring_length = 1;
 
 int WIN_WIDTH = 800, WIN_HEIGHT = 600;
 
@@ -66,12 +71,20 @@ void loadModelViewMatrix();
 void setupModelViewProjectionTransform();
 void reloadMVPUniform();
 void update_velocity();
-double get_force_gravity();
-double get_distance();
-double get_acceleration();
-double get_delta_time();
-int main( int, char** );
-// function declarations
+float get_force_gravity();
+float get_distance();
+float get_acceleration();
+float get_delta_time();
+void moveModelTo(glm::mat4 & model, glm::vec3 new_pos);
+void updateMatrixColumn(glm::mat4 & matrix, int column, glm::vec3 vector);
+float get_delta_time();
+float get_total_time();
+float get_distance();
+glm::vec3 get_force_spring();
+glm::vec3 get_velocity(glm::vec3 forces);
+glm::vec3 get_position(glm::vec3 velocity);
+glm::vec3 get_force_dampening();
+glm::vec3 get_spring_vector();
 
 void displayFunc()
 {
@@ -151,7 +164,7 @@ void loadModelViewMatrix()
 {
 	//M = UniformScaleMatrix( 0.25 );	// scale Quad First
     //M = TranslateMatrix( 0, 0, -1.0 ) * M;	// translate away from (0,0,0)
-	M = glm::translate(M, glm::vec3(0, 0, -1));
+	M = glm::translate(M, glm::vec3(0, 0, -10));
 	M = glm::scale(M, glm::vec3(0.25));
     // view doesn't change, but if it did you would use this
    // V = IdentityMatrix();
@@ -169,7 +182,7 @@ void reloadMVPUniform()
 	glUseProgram( basicProgramID );
 	glUniformMatrix4fv( 	mvpID,		// ID
 				1,		// only 1 matrix
-				GL_TRUE,	// transpose matrix, glm::mat4 is row major
+				GL_FALSE,	// transpose matrix, glm::mat4 is row major
 				glm::value_ptr(MVP)	// pointer to data in glm::mat4
 			);
 }
@@ -207,16 +220,16 @@ void loadBuffer()
 {
 	// Just basic layout of floats, for a quad
 	// 3 floats per vertex, 4 vertices
-	std::vector< Vec3f > verts;
-	verts.push_back( Vec3f( 1, 1, 0 ) );
-	verts.push_back( Vec3f( 1, -1, 0 ) );
-	verts.push_back( Vec3f( -1, -1, 0 ) );
-	verts.push_back( Vec3f( -1, 1, 0 ) );
+	std::vector< glm::vec3 > verts;
+	verts.push_back( glm::vec3( 1, 1, 0 ) );
+	verts.push_back( glm::vec3( 1, -1, 0 ) );
+	verts.push_back( glm::vec3( -1, -1, 0 ) );
+	verts.push_back( glm::vec3( -1, 1, 0 ) );
 	
 	glBindBuffer( GL_ARRAY_BUFFER, vertBufferID );
 	glBufferData(	GL_ARRAY_BUFFER,	
-			sizeof(Vec3f)*4,	// byte size of Vec3f, 4 of them
-			verts.data(),		// pointer (Vec3f*) to contents of verts
+			sizeof(glm::vec3)*4,	// byte size of glm::vec3, 4 of them
+			verts.data(),		// pointer (glm::vec3*) to contents of verts
 			GL_STATIC_DRAW );	// Usage pattern of GPU buffer
 
 	// RGB values for the 4 vertices of the quad
@@ -238,7 +251,7 @@ void init()
 	glEnable( GL_DEPTH_TEST );
 
 	// SETUP SHADERS, BUFFERS, VAOs
-
+	mass_previous_position = initial_mass_position;
 	generateIDs();
 	setupVAO();
 	loadBuffer();
@@ -252,13 +265,19 @@ void init()
 void timerFunc(int delay)
 {
 	//M = M * RotateAboutYMatrix(1.0);
-	cout << "Total distance: " << get_distance() << endl;
-	//cout << "Total delta time: " << get_delta_time() << endl;
-	//cout << "Total acceleration: " << get_acceleration() << endl;
-	//cout << "Total gravity: " << get_force_gravity() << endl;
-	//cout << "M Before: " << M << endl;
+	//cout << "Total distance: " << get_distance() << endl;
+	
+	//cout << glm::to_string(M) << endl;
 	//M = TranslateMatrix(0, get_distance(), 0);
-	//cout << "M After: " << M << endl;
+	glm::vec3 total_forces = get_force_spring() + get_force_dampening();
+	velocity_prev = velocity_curr;
+	velocity_curr = get_velocity(total_forces);
+	glm::vec3 position = get_position(velocity_curr);
+	//cout << "New Total Forces: " << glm::to_string(total_forces) << endl;
+	//cout << "Dampening : " << glm::to_string(get_force_dampening()) << endl;
+	moveModelTo(M, position);
+	cout << "M After: " << glm::to_string(M) << endl;
+	mass_previous_position = position;
 
 	//update_velocity();
 	cout << "\n" << endl;
@@ -271,43 +290,65 @@ void timerFunc(int delay)
 	glutTimerFunc(delay, timerFunc, delay);
 }
 
-// The following are formulas derived from a system with only up and down forces
+void moveModelTo(glm::mat4 & model, glm::vec3 new_pos)
+{
+	updateMatrixColumn(model, 3, new_pos);
+}
 
-double get_delta_time()
+void updateMatrixColumn(glm::mat4 & matrix, int column, glm::vec3 vector)
+{
+	matrix[column][0] = vector.x;
+	matrix[column][1] = vector.y;
+	matrix[column][2] = vector.z;
+}
+
+float get_delta_time()
 {
 	return double(delay) / 1000;
 }
 
 // Returns the top time in seconds
-double get_total_time()
+float get_total_time()
 {
 	return (glutGet(GLUT_ELAPSED_TIME) / double(1000));
 }
-//
-//double get_acceleration()
-//{
-//	double denom = (mass + (1.5)*(pow(get_delta_time(), 2)));
-//	//cout << "Acceleration Denominator: " << std::to_string(denom) << endl;
-//	return (get_force_gravity() - (spring_constant * velocity_prev * get_delta_time())) / denom;
-//}
-//
-//double get_force_gravity()
-//{
-//	return mass * gravity;
-//}
 
-double get_distance()
+float get_distance()
 {
 	//return (mass * get_acceleration() + get_force_gravity()) / spring_constant;
+	//initial_position = initial_position * 0.9999;
 	return initial_position * cos(spring_constant * get_total_time() / mass);
 }
 
-//void update_velocity()
-//{
-//	cout << "Old velocity previous: " << velocity_prev << endl;
-//	velocity_prev = (get_acceleration() * get_delta_time()) + (velocity_prev); // Damping is too hard, using hack to reduce previous velocity every time
-//	cout << "New velocity previous: " << velocity_prev << endl;
-//}
+glm::vec3 get_force_dampening()
+{
+	cout << "delta v " << glm::to_string(velocity_curr - velocity_prev) << endl;
+	return (spring_friction * glm::dot((velocity_curr - velocity_prev), get_spring_vector()) * get_spring_vector());
+}
+
+glm::vec3 get_spring_vector()
+{
+	glm::vec3 spring_vector = (mass_previous_position - spring_anchor_position);
+	return glm::normalize(spring_vector);
+}
+
+glm::vec3 get_force_spring()
+{
+	glm::vec3 spring_vector = (mass_previous_position - spring_anchor_position);
+	//cout << "Spring vector; " << glm::to_string(spring_constant * glm::normalize(spring_vector)) << endl;
+	//cout << "(glm::length(spring_vector) - total_spring_length); " << (glm::length(spring_vector) - total_spring_length) << endl;
+	return -spring_constant * get_spring_vector() * (glm::length(spring_vector) - total_spring_length);
+}
+
+glm::vec3 get_velocity(glm::vec3 forces)
+{
+	return (velocity_prev + get_delta_time()*forces / mass);
+}
+
+glm::vec3 get_position(glm::vec3 velocity)
+{
+	return mass_previous_position + get_delta_time() * velocity;
+}
 
 int main( int argc, char** argv )
 {
@@ -331,7 +372,7 @@ int main( int argc, char** argv )
 
     glutDisplayFunc( displayFunc );
 	glutReshapeFunc( resizeFunc );
-	//glutTimerFunc(delay, timerFunc, delay);
+	glutTimerFunc(delay, timerFunc, delay);
 	//glutIdleFunc(idleFunc);
 	init(); // our own initialize stuff func
 
