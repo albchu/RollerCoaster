@@ -20,8 +20,12 @@
 
 #include "ShaderTools.h"
 #include "Vec3f.h"
-#include "Mat4f.h"
-#include "OpenGLMatrixTools.h"
+
+#include <glm/gtx/string_cast.hpp>
+#include<glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 
 using std::cout;
 using std::endl;
@@ -34,16 +38,17 @@ GLuint basicProgramID;
 GLuint vertBufferID;
 GLuint colorBufferID;
 
-Mat4f MVP;
-Mat4f M;
-Mat4f V;
-Mat4f P;
+glm::mat4 MVP;
+glm::mat4 M;
+glm::mat4 V;
+glm::mat4 P;
 
 double mass = 5;
 double gravity = 9.81;
 double spring_constant = 5;
 double velocity_prev = 0;
-int delay = 100;
+double initial_position = 1;
+int delay = 500;
 
 int WIN_WIDTH = 800, WIN_HEIGHT = 600;
 
@@ -60,6 +65,11 @@ void loadProjectionMatrix();
 void loadModelViewMatrix();
 void setupModelViewProjectionTransform();
 void reloadMVPUniform();
+void update_velocity();
+double get_force_gravity();
+double get_distance();
+double get_acceleration();
+double get_delta_time();
 int main( int, char** );
 // function declarations
 
@@ -134,19 +144,17 @@ void loadProjectionMatrix()
 	// near Z plane > 0
 	// far Z plane
 
-    P = PerspectiveProjection(  60, // FOV
-                                static_cast<float>(WIN_WIDTH)/WIN_HEIGHT, // Aspect
-                                0.01,   // near plane
-                                5 ); // far plane depth
+	P = glm::perspective(60.0f, static_cast<float>(WIN_WIDTH) / WIN_HEIGHT, 0.01f, 1000.f);
 }
 
 void loadModelViewMatrix()
 {
-    M = UniformScaleMatrix( 0.25 );	// scale Quad First
-    M = TranslateMatrix( 0, 0, -1.0 ) * M;	// translate away from (0,0,0)
-
+	//M = UniformScaleMatrix( 0.25 );	// scale Quad First
+    //M = TranslateMatrix( 0, 0, -1.0 ) * M;	// translate away from (0,0,0)
+	M = glm::translate(M, glm::vec3(0, 0, -1));
+	M = glm::scale(M, glm::vec3(0.25));
     // view doesn't change, but if it did you would use this
-    V = IdentityMatrix();
+   // V = IdentityMatrix();
 }
 
 void setupModelViewProjectionTransform()
@@ -161,8 +169,8 @@ void reloadMVPUniform()
 	glUseProgram( basicProgramID );
 	glUniformMatrix4fv( 	mvpID,		// ID
 				1,		// only 1 matrix
-				GL_TRUE,	// transpose matrix, Mat4f is row major
-				MVP.data()	// pointer to data in Mat4f
+				GL_TRUE,	// transpose matrix, glm::mat4 is row major
+				glm::value_ptr(MVP)	// pointer to data in glm::mat4
 			);
 }
 
@@ -243,7 +251,17 @@ void init()
 
 void timerFunc(int delay)
 {
-	M = M * RotateAboutYMatrix(1.0);
+	//M = M * RotateAboutYMatrix(1.0);
+	cout << "Total distance: " << get_distance() << endl;
+	//cout << "Total delta time: " << get_delta_time() << endl;
+	//cout << "Total acceleration: " << get_acceleration() << endl;
+	//cout << "Total gravity: " << get_force_gravity() << endl;
+	//cout << "M Before: " << M << endl;
+	//M = TranslateMatrix(0, get_distance(), 0);
+	//cout << "M After: " << M << endl;
+
+	//update_velocity();
+	cout << "\n" << endl;
 	setupModelViewProjectionTransform();
 
 	// send changes to GPU
@@ -253,20 +271,43 @@ void timerFunc(int delay)
 	glutTimerFunc(delay, timerFunc, delay);
 }
 
-double get_acceleration()
+// The following are formulas derived from a system with only up and down forces
+
+double get_delta_time()
 {
-	return (get_force_gravity() - (spring_constant * velocity_prev * delay)) / (mass + (3/2)*(pow(delay, 2)));
+	return double(delay) / 1000;
 }
 
-double get_force_gravity()
+// Returns the top time in seconds
+double get_total_time()
 {
-	return mass * gravity;
+	return (glutGet(GLUT_ELAPSED_TIME) / double(1000));
 }
+//
+//double get_acceleration()
+//{
+//	double denom = (mass + (1.5)*(pow(get_delta_time(), 2)));
+//	//cout << "Acceleration Denominator: " << std::to_string(denom) << endl;
+//	return (get_force_gravity() - (spring_constant * velocity_prev * get_delta_time())) / denom;
+//}
+//
+//double get_force_gravity()
+//{
+//	return mass * gravity;
+//}
 
 double get_distance()
 {
-	return (mass * get_acceleration() + get_force_gravity()) / spring_constant;
+	//return (mass * get_acceleration() + get_force_gravity()) / spring_constant;
+	return initial_position * cos(spring_constant * get_total_time() / mass);
 }
+
+//void update_velocity()
+//{
+//	cout << "Old velocity previous: " << velocity_prev << endl;
+//	velocity_prev = (get_acceleration() * get_delta_time()) + (velocity_prev); // Damping is too hard, using hack to reduce previous velocity every time
+//	cout << "New velocity previous: " << velocity_prev << endl;
+//}
 
 int main( int argc, char** argv )
 {
@@ -290,7 +331,7 @@ int main( int argc, char** argv )
 
     glutDisplayFunc( displayFunc );
 	glutReshapeFunc( resizeFunc );
-	glutTimerFunc(delay, timerFunc, delay);
+	//glutTimerFunc(delay, timerFunc, delay);
 	//glutIdleFunc(idleFunc);
 	init(); // our own initialize stuff func
 
