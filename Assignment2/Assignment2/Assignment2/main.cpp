@@ -85,6 +85,22 @@ glm::vec3 get_velocity(glm::vec3 forces);
 glm::vec3 get_position(glm::vec3 velocity);
 glm::vec3 get_force_dampening();
 glm::vec3 get_spring_vector();
+float getRandFloat(float low, float high);
+
+struct _Point
+{
+	std::vector<glm::vec3> neighbors;
+	float mass;
+	glm::vec3 velocity_curr;
+	glm::vec3 velocity_prev;
+	glm::vec3 position_curr;
+	glm::vec3 position_prev;
+};
+
+typedef _Point Point;
+typedef std::vector<Point> points;
+points pointsList;
+std::vector<glm::vec3> verts;
 
 void displayFunc()
 {
@@ -97,23 +113,10 @@ void displayFunc()
 	// and attribute config of buffers
 	glBindVertexArray( vaoID );
 	// Draw Quads, start at vertex 0, draw 4 of them (for a quad)
-	glDrawArrays( GL_QUADS, 0, 4 );
+	glDrawArrays( GL_LINE_STRIP, 0, verts.size() );
 
 	glutSwapBuffers();
 }
-
-//void idleFunc()
-//{
-//	// every frame refresh, rotate quad around y axis by 1 degree
-////	MVP = MVP * RotateAboutYMatrix( 1.0 );
-//    M = M * RotateAboutYMatrix( 1.0 );
-//    setupModelViewProjectionTransform();
-//
-//	// send changes to GPU
-//	reloadMVPUniform();
-//	
-//	glutPostRedisplay();
-//}
 
 void resizeFunc( int width, int height )
 {
@@ -216,35 +219,77 @@ void setupVAO()
 	glBindVertexArray( 0 ); // reset to default		
 }
 
+std::vector<glm::vec3> get_current_positions(std::vector<Point> points)
+{
+	std::vector<glm::vec3> verts;
+	for (Point point : points)
+	{
+		cout << "Vert Inside: " << glm::to_string(point.position_curr) << endl;
+		verts.push_back(point.position_curr);
+		verts.push_back(point.position_curr);
+	}
+	return verts;
+}
+
 void loadBuffer()
 {
-	// Just basic layout of floats, for a quad
-	// 3 floats per vertex, 4 vertices
-	std::vector< glm::vec3 > verts;
-	verts.push_back( glm::vec3( 1, 1, 0 ) );
-	verts.push_back( glm::vec3( 1, -1, 0 ) );
-	verts.push_back( glm::vec3( -1, -1, 0 ) );
-	verts.push_back( glm::vec3( -1, 1, 0 ) );
-	
+	verts = get_current_positions(pointsList);
+
+	for (glm::vec3 vert : verts)
+		cout << "Vert Outside: " << glm::to_string(vert) << endl;
+
+
 	glBindBuffer( GL_ARRAY_BUFFER, vertBufferID );
 	glBufferData(	GL_ARRAY_BUFFER,	
-			sizeof(glm::vec3)*4,	// byte size of glm::vec3, 4 of them
+			sizeof(glm::vec3)*verts.size(),	// byte size of glm::vec3, 4 of them
 			verts.data(),		// pointer (glm::vec3*) to contents of verts
 			GL_STATIC_DRAW );	// Usage pattern of GPU buffer
 
-	// RGB values for the 4 vertices of the quad
-	const float colors[] = {
-			1.0f,	0.0f,	0.0f,
-			0.0f,	1.0f,	0.0f,
-			0.0f,	0.0f,	1.0f,
-			1.0f,	1.0f,	1.0f };
 
-	glBindBuffer( GL_ARRAY_BUFFER, colorBufferID );
-	glBufferData(	GL_ARRAY_BUFFER,
-			sizeof(colors),
-			colors,
-			GL_STATIC_DRAW );
+	// RGB values for the vertices
+	std::vector<glm::vec3> colors;
+	for (int i = 0; i < verts.size(); i++)
+	{
+		float r = getRandFloat(0, 1.0);
+		float g = getRandFloat(0.0, 1.0);
+		float b = getRandFloat(1.0, 1.0);
+		colors.push_back(glm::vec3(r, g, b));
+	}
+
+	glBindBuffer(GL_ARRAY_BUFFER, colorBufferID);
+	glBufferData(GL_ARRAY_BUFFER,
+		sizeof(glm::vec3)*colors.size(),
+		colors.data(),
+		GL_STATIC_DRAW);
 }
+
+float getRandFloat(float low, float high)
+{
+	return (low + static_cast <float> (rand()) / (static_cast <float> (RAND_MAX / (high - low))));
+}
+
+void initBuffer()
+{
+	Point point1;// = new Point();
+	Point point2;// = new _Point();
+	Point point3;// = new _Point();
+	Point point4;
+	Point point5;
+	Point point6;
+	point1.position_curr = glm::vec3(-10, 10, 0);
+	point2.position_curr = glm::vec3(-5, 10, 0);
+	point3.position_curr = glm::vec3(0, 10, 0);
+	point4.position_curr = glm::vec3(5, 10, 0);
+	point5.position_curr = glm::vec3(10, 10, 0);
+	point6.position_curr = glm::vec3(15, 10, 0);
+	pointsList.push_back(point1);
+	pointsList.push_back(point2);
+	pointsList.push_back(point3);
+	pointsList.push_back(point4);
+	pointsList.push_back(point5);
+	pointsList.push_back(point6);
+}
+
 
 void init()
 {
@@ -254,6 +299,7 @@ void init()
 	mass_previous_position = initial_mass_position;
 	generateIDs();
 	setupVAO();
+	initBuffer();
 	loadBuffer();
 
     loadModelViewMatrix();
@@ -269,21 +315,24 @@ void timerFunc(int delay)
 	
 	//cout << glm::to_string(M) << endl;
 	//M = TranslateMatrix(0, get_distance(), 0);
-	glm::vec3 total_forces = get_force_spring() + get_force_dampening();
-	velocity_prev = velocity_curr;
-	velocity_curr = get_velocity(total_forces);
-	glm::vec3 position = get_position(velocity_curr);
+
+	//glm::vec3 total_forces = get_force_spring() + get_force_dampening();
+	//velocity_prev = velocity_curr;
+	//velocity_curr = get_velocity(total_forces);
+	//glm::vec3 position = get_position(velocity_curr);
+
 	//cout << "New Total Forces: " << glm::to_string(total_forces) << endl;
 	//cout << "Dampening : " << glm::to_string(get_force_dampening()) << endl;
-	moveModelTo(M, position);
+	//moveModelTo(M, position);
 	cout << "M After: " << glm::to_string(M) << endl;
-	mass_previous_position = position;
-
+	//mass_previous_position = position;
+	//pointsList.at(0).position_curr = glm::vec3(pointsList.at(0).position_curr.x + 0.05, pointsList.at(0).position_curr.y, pointsList.at(0).position_curr.z);
 	//update_velocity();
 	cout << "\n" << endl;
 	setupModelViewProjectionTransform();
 
 	// send changes to GPU
+	loadBuffer();
 	reloadMVPUniform();
 
 	glutPostRedisplay();
@@ -322,7 +371,7 @@ float get_distance()
 
 glm::vec3 get_force_dampening()
 {
-	cout << "delta v " << glm::to_string(velocity_curr - velocity_prev) << endl;
+	//cout << "delta v " << glm::to_string(velocity_curr - velocity_prev) << endl;
 	return (spring_friction * glm::dot((velocity_curr - velocity_prev), get_spring_vector()) * get_spring_vector());
 }
 
@@ -359,7 +408,7 @@ int main( int argc, char** argv )
 	glutInitWindowSize( WIN_WIDTH, WIN_HEIGHT );
 	glutInitWindowPosition( 0, 0 );
 
-	glutCreateWindow( "Assignment 3 : Mass on Spring" );
+	glutCreateWindow( "Assignment 3 : Chain Pendulum" );
 
 	glewExperimental=true; // Needed in Core Profile
 	// Comment out if you want to us glBeign etc...
