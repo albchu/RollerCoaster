@@ -1,17 +1,6 @@
-// CPSC 587 Created By: Andrew Owens
-// This is a (very) basic program to
-// 1) load shaders from external files, and make a shader program
-// 2) make Vertex Array Object and Vertex Buffer Object for the triangle
-
-// take a look at the following sites for further readings:
-// opengl-tutorial.org -> The first triangle (New OpenGL, great start)
-// antongerdelan.net -> shaders pipeline explained
-// ogldev.atspace.co.uk -> good resource 
-
-
-// NOTE: this dependencies (include/library files) will need to be tweaked if
-// you wish to run this on a non lab computer
-
+// CPSC 587 
+// Assignment 3: Chain Pendulum
+//
 #include<iostream>
 #include<cmath>
 
@@ -42,20 +31,34 @@ glm::mat4 M;
 glm::mat4 V;
 glm::mat4 P;
 
-float mass = 3;
-//float gravity = 9.81;
-float spring_constant = 10.0f;
-float spring_friction = 50.0f;
-glm::vec3 velocity_prev;
-glm::vec3 velocity_curr;
-float initial_position = 2;
+float gravity = 3.0f;
+int num_points = 6;
+float global_spring_constant = 3.0f;
+float global_spring_friction = 1.0f;
+float global_point_mass = 3.0f;
+float global_spring_length = 2.0f;
 int delay = 10;
-glm::vec3 spring_anchor_position = glm::vec3(0.f, 2.f, -10.f);
-glm::vec3 initial_mass_position = glm::vec3(5.f, 0.f, -10.f);
-glm::vec3 mass_previous_position;
-float total_spring_length = 1;
 
 int WIN_WIDTH = 800, WIN_HEIGHT = 600;
+
+struct _Point
+{
+	std::vector<glm::vec3> neighbors;
+	float mass;
+	float spring_length;
+	float spring_constant;
+	float spring_friction;
+	glm::vec3 velocity_curr;
+	glm::vec3 velocity_prev;
+	glm::vec3 position_curr;
+	glm::vec3 position_prev;
+	glm::vec3 forces;
+};
+
+typedef _Point Point;
+typedef std::vector<Point> points;
+points pointsList;
+std::vector<glm::vec3> verts;
 
 // function declarations... just to keep things kinda organized.
 void displayFunc();
@@ -79,28 +82,13 @@ void moveModelTo(glm::mat4 & model, glm::vec3 new_pos);
 void updateMatrixColumn(glm::mat4 & matrix, int column, glm::vec3 vector);
 float get_delta_time();
 float get_total_time();
-float get_distance();
-glm::vec3 get_force_spring();
-glm::vec3 get_velocity(glm::vec3 forces);
-glm::vec3 get_position(glm::vec3 velocity);
-glm::vec3 get_force_dampening();
-glm::vec3 get_spring_vector();
+//float get_distance();
+glm::vec3 get_force_dampening(Point & point_j, Point & point_x);
+glm::vec3 get_spring_vector(Point & point_j, Point & point_x);
+glm::vec3 get_force_spring(Point & point_j, Point & point_x);
+glm::vec3 get_velocity(Point & point, glm::vec3 forces);
+glm::vec3 get_position(Point & point, glm::vec3 velocity);
 float getRandFloat(float low, float high);
-
-struct _Point
-{
-	std::vector<glm::vec3> neighbors;
-	float mass;
-	glm::vec3 velocity_curr;
-	glm::vec3 velocity_prev;
-	glm::vec3 position_curr;
-	glm::vec3 position_prev;
-};
-
-typedef _Point Point;
-typedef std::vector<Point> points;
-points pointsList;
-std::vector<glm::vec3> verts;
 
 void displayFunc()
 {
@@ -112,7 +100,7 @@ void displayFunc()
 	// Use VAO that holds buffer bindings
 	// and attribute config of buffers
 	glBindVertexArray( vaoID );
-	// Draw Quads, start at vertex 0, draw 4 of them (for a quad)
+	glLineWidth(20.0);
 	glDrawArrays( GL_LINE_STRIP, 0, verts.size() );
 
 	glutSwapBuffers();
@@ -153,24 +141,13 @@ void deleteIDs()
 
 void loadProjectionMatrix()
 {
-    // Perspective Only
-    
-	// field of view angle 60 degrees
-	// window aspect ratio
-	// near Z plane > 0
-	// far Z plane
-
 	P = glm::perspective(60.0f, static_cast<float>(WIN_WIDTH) / WIN_HEIGHT, 0.01f, 1000.f);
 }
 
 void loadModelViewMatrix()
 {
-	//M = UniformScaleMatrix( 0.25 );	// scale Quad First
-    //M = TranslateMatrix( 0, 0, -1.0 ) * M;	// translate away from (0,0,0)
 	M = glm::translate(M, glm::vec3(0, 0, -10));
-	M = glm::scale(M, glm::vec3(0.25));
-    // view doesn't change, but if it did you would use this
-   // V = IdentityMatrix();
+	M = glm::scale(M, glm::vec3(0.15));
 }
 
 void setupModelViewProjectionTransform()
@@ -219,12 +196,12 @@ void setupVAO()
 	glBindVertexArray( 0 ); // reset to default		
 }
 
-std::vector<glm::vec3> get_current_positions(std::vector<Point> points)
+std::vector<glm::vec3> get_current_positions(std::vector<Point> & points)
 {
 	std::vector<glm::vec3> verts;
 	for (Point point : points)
 	{
-		cout << "Vert Inside: " << glm::to_string(point.position_curr) << endl;
+		cout << "loadBuffer: " << glm::to_string(point.position_curr) << endl;
 		verts.push_back(point.position_curr);
 		verts.push_back(point.position_curr);
 	}
@@ -234,10 +211,6 @@ std::vector<glm::vec3> get_current_positions(std::vector<Point> points)
 void loadBuffer()
 {
 	verts = get_current_positions(pointsList);
-
-	for (glm::vec3 vert : verts)
-		cout << "Vert Outside: " << glm::to_string(vert) << endl;
-
 
 	glBindBuffer( GL_ARRAY_BUFFER, vertBufferID );
 	glBufferData(	GL_ARRAY_BUFFER,	
@@ -270,24 +243,17 @@ float getRandFloat(float low, float high)
 
 void initBuffer()
 {
-	Point point1;// = new Point();
-	Point point2;// = new _Point();
-	Point point3;// = new _Point();
-	Point point4;
-	Point point5;
-	Point point6;
-	point1.position_curr = glm::vec3(-10, 10, 0);
-	point2.position_curr = glm::vec3(-5, 10, 0);
-	point3.position_curr = glm::vec3(0, 10, 0);
-	point4.position_curr = glm::vec3(5, 10, 0);
-	point5.position_curr = glm::vec3(10, 10, 0);
-	point6.position_curr = glm::vec3(15, 10, 0);
-	pointsList.push_back(point1);
-	pointsList.push_back(point2);
-	pointsList.push_back(point3);
-	pointsList.push_back(point4);
-	pointsList.push_back(point5);
-	pointsList.push_back(point6);
+	int start_point = -10;
+	for (int i = 0; i < num_points; i++)
+	{
+		Point aPoint;
+		aPoint.position_curr = glm::vec3(start_point + (i * 5), 30, 0);
+		aPoint.spring_constant = global_spring_constant;
+		aPoint.spring_friction = global_spring_friction;
+		aPoint.spring_length = global_spring_length;
+		aPoint.mass = global_point_mass;
+		pointsList.push_back(aPoint);
+	}
 }
 
 
@@ -296,7 +262,7 @@ void init()
 	glEnable( GL_DEPTH_TEST );
 
 	// SETUP SHADERS, BUFFERS, VAOs
-	mass_previous_position = initial_mass_position;
+	//mass_previous_position = initial_mass_position;
 	generateIDs();
 	setupVAO();
 	initBuffer();
@@ -308,27 +274,64 @@ void init()
 	reloadMVPUniform();
 }
 
+void update_position(Point & point, glm::vec3 position)
+{
+	point.position_prev = point.position_curr;
+	point.position_curr = position;
+}
+
+void update_velocity(Point & point, glm::vec3 velocity)
+{
+	point.velocity_prev = point.velocity_curr;
+	point.velocity_curr = velocity;
+}
+
+float get_force_gravity(Point & point)
+{
+	return gravity * point.mass;
+}
+
 void timerFunc(int delay)
 {
-	//M = M * RotateAboutYMatrix(1.0);
-	//cout << "Total distance: " << get_distance() << endl;
-	
-	//cout << glm::to_string(M) << endl;
-	//M = TranslateMatrix(0, get_distance(), 0);
 
-	//glm::vec3 total_forces = get_force_spring() + get_force_dampening();
-	//velocity_prev = velocity_curr;
-	//velocity_curr = get_velocity(total_forces);
-	//glm::vec3 position = get_position(velocity_curr);
+	std::vector<glm::vec3> spring_forces;
+	std::vector<glm::vec3> dampen_forces;
+	for (int i = 0; i < pointsList.size(); i++)	// i is instantiated to 1 to allow the first element 0 to be the anchor
+	{
+		spring_forces.push_back(glm::vec3(0.0, 0.0, 0.0));
+		dampen_forces.push_back(glm::vec3(0.0, 0.0, 0.0));
+	}
+	for (int i = 1; i < pointsList.size(); i++)	// i is instantiated to 1 to allow the first element 0 to be the anchor
+	{
+		Point & point_j = pointsList.at(i - 1);
+		Point & point_i = pointsList.at(i);
+		glm::vec3 a_spring_force = get_force_spring(point_j, point_i);
+		glm::vec3 a_dampen_force = get_force_dampening(point_j, point_i);
+		spring_forces[i] += a_spring_force;
+		dampen_forces[i] += a_dampen_force;
+	}
 
-	//cout << "New Total Forces: " << glm::to_string(total_forces) << endl;
-	//cout << "Dampening : " << glm::to_string(get_force_dampening()) << endl;
-	//moveModelTo(M, position);
-	cout << "M After: " << glm::to_string(M) << endl;
-	//mass_previous_position = position;
-	//pointsList.at(0).position_curr = glm::vec3(pointsList.at(0).position_curr.x + 0.05, pointsList.at(0).position_curr.y, pointsList.at(0).position_curr.z);
-	//update_velocity();
-	cout << "\n" << endl;
+	for (int i = 1; i < pointsList.size() - 1; i++)	// i is instantiated to 1 to allow the first element 0 to be the anchor
+	{
+		Point & point_j = pointsList.at(i + 1);
+		Point & point_i = pointsList.at(i);
+		glm::vec3 a_spring_force = get_force_spring(point_j, point_i);
+		glm::vec3 a_dampen_force = get_force_dampening(point_j, point_i);
+		spring_forces[i] += a_spring_force;
+		dampen_forces[i] += a_dampen_force;
+	}
+
+	for (int i = 1; i < pointsList.size(); i++)	// i is instantiated to 1 to allow the first element 0 to be the anchor
+	{
+		cout << "Loop Index: " << i << endl;
+		Point & point = pointsList.at(i);
+		glm::vec3 total_forces = spring_forces.at(i) + dampen_forces.at(i) - glm::vec3(0, get_force_gravity(point), 0);
+		glm::vec3 new_velocity = get_velocity(point, total_forces);
+		glm::vec3 position = get_position(point, new_velocity);
+		update_position(point, position);
+		update_velocity(point, new_velocity);	
+	}
+	cout << "CYCLE COMPLETED\n" << endl;
 	setupModelViewProjectionTransform();
 
 	// send changes to GPU
@@ -353,7 +356,7 @@ void updateMatrixColumn(glm::mat4 & matrix, int column, glm::vec3 vector)
 
 float get_delta_time()
 {
-	return double(delay) / 1000;
+	return double(delay) / 100;
 }
 
 // Returns the top time in seconds
@@ -362,41 +365,32 @@ float get_total_time()
 	return (glutGet(GLUT_ELAPSED_TIME) / double(1000));
 }
 
-float get_distance()
+glm::vec3 get_force_dampening(Point & point_j, Point & point_x)
 {
-	//return (mass * get_acceleration() + get_force_gravity()) / spring_constant;
-	//initial_position = initial_position * 0.9999;
-	return initial_position * cos(spring_constant * get_total_time() / mass);
+	glm::vec3 spring_vector = get_spring_vector(point_j, point_x);
+	return (point_x.spring_friction * (glm::dot((point_j.velocity_prev - point_x.velocity_curr), spring_vector)) * spring_vector);
 }
 
-glm::vec3 get_force_dampening()
+glm::vec3 get_spring_vector(Point & point_j, Point & point_x)
 {
-	//cout << "delta v " << glm::to_string(velocity_curr - velocity_prev) << endl;
-	return (spring_friction * glm::dot((velocity_curr - velocity_prev), get_spring_vector()) * get_spring_vector());
-}
-
-glm::vec3 get_spring_vector()
-{
-	glm::vec3 spring_vector = (mass_previous_position - spring_anchor_position);
+	glm::vec3 spring_vector = (point_j.position_curr - point_x.position_curr);
 	return glm::normalize(spring_vector);
 }
 
-glm::vec3 get_force_spring()
+glm::vec3 get_force_spring(Point & point_j, Point & point_x)
 {
-	glm::vec3 spring_vector = (mass_previous_position - spring_anchor_position);
-	//cout << "Spring vector; " << glm::to_string(spring_constant * glm::normalize(spring_vector)) << endl;
-	//cout << "(glm::length(spring_vector) - total_spring_length); " << (glm::length(spring_vector) - total_spring_length) << endl;
-	return -spring_constant * get_spring_vector() * (glm::length(spring_vector) - total_spring_length);
+	glm::vec3 spring_vector = get_spring_vector(point_j, point_x);
+	return point_x.spring_constant * spring_vector * (glm::length(point_j.position_curr - point_x.position_curr) - point_x.spring_length);
 }
 
-glm::vec3 get_velocity(glm::vec3 forces)
+glm::vec3 get_velocity(Point & point, glm::vec3 forces)
 {
-	return (velocity_prev + get_delta_time()*forces / mass);
+	return (point.velocity_curr + (get_delta_time() * forces / point.mass));
 }
 
-glm::vec3 get_position(glm::vec3 velocity)
+glm::vec3 get_position(Point & point, glm::vec3 velocity)
 {
-	return mass_previous_position + get_delta_time() * velocity;
+	return point.position_curr + get_delta_time() * velocity;
 }
 
 int main( int argc, char** argv )
@@ -422,7 +416,6 @@ int main( int argc, char** argv )
     glutDisplayFunc( displayFunc );
 	glutReshapeFunc( resizeFunc );
 	glutTimerFunc(delay, timerFunc, delay);
-	//glutIdleFunc(idleFunc);
 	init(); // our own initialize stuff func
 
 	glutMainLoop();
