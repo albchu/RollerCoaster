@@ -42,15 +42,20 @@ glm::mat4 P;
 float RADIUS_AVOID = 0.5f;		// The max distance threshold where a boid will move away from its neighbor
 float RADIUS_COHERANCE = 2.0f;	// The max distance threshold where a boid will move in the same velocity as its neighbor
 float RADIUS_ATTRACT = 5.0f;	// The max distance threshold before a boid will move towards that neighbor
-float RADIUS_MAX = 10.0f;	// The max distance threshold before a boid will move towards that neighbor
+float RADIUS_MAX = 15.0f;	// The max distance threshold before a boid will move towards that neighbor
 float velocity_scalar = 0.002f;
 float velocity_avoid_scalar = 0.02f;
 float velocity_coherance_scalar = 0.008f;
-float velocity_attract_scalar = 0.08f;
+float velocity_attract_scalar = 0.04f;
 
 bool left_click = false;
+bool right_click = false;
+bool middle_click = false;
+float delta_x = 0;
+float delta_y = 0;
+float delta_z = 0;
 
-int delay = 1;
+int delay = 1;	// Time delay for timerFunc to rerender another frame
 
 int WIN_WIDTH = 800, WIN_HEIGHT = 600;
 
@@ -65,7 +70,7 @@ struct _Boid
 typedef _Boid Boid;
 typedef std::vector<Boid> boids;
 std::vector<glm::vec3> verts;	// Holds all the verts to draw out. Will be updated by boids
-std::vector<glm::vec3> obstacleVerts;	// Holds all the obstacle verts to draw out. Will be updated by boids
+std::vector<glm::vec3> obstacle_verts;	// Holds all the obstacle verts to draw out. Will be updated by boids
 boids boidsList;
 
 // function declarations... just to keep things kinda organized.
@@ -275,7 +280,7 @@ std::vector<glm::vec3> get_current_positions(std::vector<Boid> & boids)
 void loadBuffer()
 {
 	verts = get_current_positions(boidsList);
-
+	verts.insert(verts.end(), obstacle_verts.begin(), obstacle_verts.end());
 	glBindBuffer( GL_ARRAY_BUFFER, vertBufferID );
 	glBufferData(	GL_ARRAY_BUFFER,	
 			sizeof(glm::vec3)*verts.size(),	// byte size of glm::vec3, 4 of them
@@ -326,21 +331,23 @@ void move_boid_to(Boid & boid, glm::vec3 position)
 	boid.right = glm::vec3(0.15, -0.15, 0.3) + position;
 }
 
-void initBuffer()
+void initBuffer(std::string obstacles_file)
 {
+	loadVec3FromFile(obstacle_verts, obstacles_file);
 	int num_boids = 100;
 	//srand(std::time(NULL));
 	for (int i = 0; i < num_boids; i++)
 		boidsList.push_back(createBoid(glm::vec3(getRandFloat(-10, 10), getRandFloat(-10, 10), getRandFloat(0, 3)), glm::vec3(getRandFloat(0, 2), 0, 0)));
 }
 
-void initBuffer(std::string boid_positions_file, std::string boid_velocities_file)
+void initBuffer(std::string boid_positions_file, std::string boid_velocities_file, std::string obstacles_file)
 {
 	std::vector<glm::vec3> boid_positions;
 	std::vector<glm::vec3> boid_velocities;
 	
 	loadVec3FromFile(boid_positions, boid_positions_file);
 	loadVec3FromFile(boid_velocities, boid_velocities_file);
+	loadVec3FromFile(obstacle_verts, obstacles_file);
 
 	for (int i = 0; i < boid_positions.size(); i++)
 	{
@@ -352,7 +359,7 @@ void initBuffer(std::string boid_positions_file, std::string boid_velocities_fil
 	}
 }
 
-void init(std::string boid_positions, std::string boid_velocities)
+void init(std::string boid_positions, std::string boid_velocities, std::string obstacles)
 {
 	glEnable( GL_DEPTH_TEST );
 
@@ -360,8 +367,8 @@ void init(std::string boid_positions, std::string boid_velocities)
 	//mass_previous_position = initial_mass_position;
 	generateIDs();
 	setupVAO();
-	//initBuffer(boid_positions, boid_velocities);
-	initBuffer();	//Generate randomized flock
+	//initBuffer(boid_positions, boid_velocities, obstacles);
+	initBuffer(obstacles);	//Generate randomized flock
 	loadBuffer();
 
 	loadModelViewMatrix();
@@ -394,7 +401,6 @@ void timerFunc(int delay)
 	{
 		Boid & boid = boidsList.at(i);
 		update_position(boid);
-		//cout << "Boid: " << i << " position: " << glm::to_string(boid.position) << endl;
 	}
 	setupModelViewProjectionTransform();
 
@@ -444,18 +450,8 @@ void update_velocity(Boid & boid_i, Boid & boid_j)
 		{
 			velocity += velocity_attract_scalar * distance;
 		}
-		//else
-		//{
-		//	cout << "boid_i " << glm::to_string(boid_i.position) << endl;
-		//	cout << "boid_j " << glm::to_string(boid_j.position) << endl;
-		//	cout << "radius_total " << radius_total << endl;
-		//	cerr << "get_velocity: This block should never be hit" << endl;
-		//}
 	}
-
-	//cout << "Boid Velocity Before: " << glm::to_string(boid_i.velocity) << endl;
 	boid_i.velocity += (velocity_scalar * velocity);
-	//cout << "Boid Velocity After: " << glm::to_string(boid_i.velocity) << endl;
 }
 
 void update_position(Boid & boid)
@@ -464,74 +460,70 @@ void update_position(Boid & boid)
 	move_boid_to(boid, new_pos);
 }
 
-//void mouseMove(int x, int y)
-//{
-//	if (left_click)
-//	{
-//		cout << "(x,y): (" << x << ", " << y << ")" << endl;
-//		boidsList.push_back(createBoid(glm::vec3(x, y, 0), glm::vec3(0, 0, 0)));
-//		cout << "Boids List: " << boidsList.size() << endl; 
-//		loadBuffer();
-//		reloadMVPUniform();
-//		//M = glm::rotate(M, 0.9f, glm::vec3(0.0f, 1.0f, 0.0f));
-//		glutPostRedisplay();
-//	}
-//
-//	//	delta_y -= y;
-//	//	delta_x -= x;
-//
-//	//	if (translate_bool)
-//	//		V = glm::translate(V, glm::vec3(-delta_x / 300, delta_y / 500, 0));
-//	//	else
-//	//	{
-//	//		V = glm::rotate(V, delta_y / 10, glm::vec3(-1.0f, 0.0f, 0.0f));
-//	//		V = glm::rotate(V, delta_x / 10, glm::vec3(0.0f, 1.0f, 0.0f));
-//	//	}
-//
-//	//	delta_x = x;
-//	//	delta_y = y;
-//	//}
-//	//if (right_click)
-//	//{
-//	//	delta_z -= y;
-//	//	V = glm::translate(V, glm::vec3(0, 0, delta_z / 500));
-//	//	delta_z = y;
-//	//}
-//	//render();
-//}
-//
-//void mouseButton(int button, int state, int x, int y)
-//{
-//	switch (button)
-//	{
-//	case GLUT_LEFT_BUTTON:
-//		std::cout << "Left Button" << std::endl;
-//		if (state == GLUT_DOWN){
-//			left_click = true;
-//			//delta_x = x;
-//			//delta_y = y;
-//		}
-//		else {
-//			left_click = false;
-//		}
-//		break;
-//	//case GLUT_MIDDLE_BUTTON:
-//	//	break;
-//	//case GLUT_RIGHT_BUTTON:
-//	//	if (state == GLUT_DOWN){
-//	//		right_click = true;
-//	//		delta_z = y;
-//	//	}
-//	//	else {
-//	//		right_click = false;
-//	//	}
-//	//	break;
-//	default:
-//		std::cerr << "Encountered an error with mouse button : " << button << ", state : " << state << std::endl;
-//	}
-//	std::cout << "Button: " << button << ", State: " << state << std::endl;
-//	printf("Button %s At %d %d\n", (state == GLUT_DOWN) ? "Down" : "Up", x, y);
-//}
+void mouseMove(int x, int y)
+{
+	if (left_click)
+	{
+		//boidsList.push_back(createBoid(glm::vec3(x, y, 0), glm::vec3(0, 0, 0)));
+	}
+	if (middle_click)
+	{
+		delta_z -= y;
+		V = glm::translate(V, glm::vec3(0, 0, delta_z / 100));
+		delta_z = y;
+	}
+	if (right_click)
+	{
+		delta_y -= y;
+		delta_x -= x;
+		M = glm::rotate(M, delta_y / 10, glm::vec3(-1.0f, 0.0f, 0.0f));
+		M = glm::rotate(M, delta_x / 10, glm::vec3(0.0f, 1.0f, 0.0f));
+		delta_x = x;
+		delta_y = y;
+	}
+	loadBuffer();
+	reloadMVPUniform();
+	glutPostRedisplay();
+}
+
+void mouseButton(int button, int state, int x, int y)
+{
+	switch (button)
+	{
+	case GLUT_LEFT_BUTTON:
+		std::cout << "Left Button" << std::endl;
+		if (state == GLUT_DOWN){
+			left_click = true;
+		}
+		else {
+			left_click = false;
+		}
+		break;
+	case GLUT_MIDDLE_BUTTON:
+			if (state == GLUT_DOWN){
+				middle_click = true;
+				delta_z = y;
+			}
+			else {
+				middle_click = false;
+			}
+		break;
+	case GLUT_RIGHT_BUTTON:
+		if (state == GLUT_DOWN){
+			right_click = true;
+			delta_x = x;
+			delta_y = y;
+		}
+		else {
+			right_click = false;
+		}
+		break;
+	default:
+		std::cerr << "Encountered an error with mouse button : " << button << ", state : " << state << std::endl;
+	}
+	std::cout << "Button: " << button << ", State: " << state << std::endl;
+	printf("Button %s At %d %d\n", (state == GLUT_DOWN) ? "Down" : "Up", x, y);
+}
 
 int main( int argc, char** argv )
 {
@@ -560,9 +552,9 @@ int main( int argc, char** argv )
 	glutDisplayFunc( displayFunc );
 	glutReshapeFunc( resizeFunc );
 	glutTimerFunc(delay, timerFunc, delay);
-	//glutMouseFunc(mouseButton);
-	//glutMotionFunc(mouseMove);
-	init(boid_positions, boid_velocities); // our own initialize stuff func
+	glutMouseFunc(mouseButton);
+	glutMotionFunc(mouseMove);
+	init(boid_positions, boid_velocities, obstacles); // our own initialize stuff func
 
 	glutMainLoop();
 
