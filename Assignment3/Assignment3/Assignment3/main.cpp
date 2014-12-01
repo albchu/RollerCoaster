@@ -1,6 +1,7 @@
 // CPSC 587 
-// Assignment 3: Chain Pendulum
+// Assignment 4: Boids
 //
+#include <sstream>
 #include<iostream>
 #include<cmath>
 
@@ -9,8 +10,9 @@
 
 #include "ShaderTools.h"
 
+#include <ctime>
 #include <glm/gtx/string_cast.hpp>
-#include<glm/glm.hpp>
+#include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -39,30 +41,18 @@ glm::mat4 P;
 //float global_spring_length = 2.0f;
 float RADIUS_AVOID = 0.5f;		// The max distance threshold where a boid will move away from its neighbor
 float RADIUS_COHERANCE = 2.0f;	// The max distance threshold where a boid will move in the same velocity as its neighbor
-float RADIUS_ATTRACT = 3.0f;	// The max distance threshold before a boid will move towards that neighbor
+float RADIUS_ATTRACT = 5.0f;	// The max distance threshold before a boid will move towards that neighbor
+float RADIUS_MAX = 10.0f;	// The max distance threshold before a boid will move towards that neighbor
+float velocity_scalar = 0.002f;
+float velocity_avoid_scalar = 0.02f;
+float velocity_coherance_scalar = 0.008f;
+float velocity_attract_scalar = 0.08f;
 
-int delay = 10;
+bool left_click = false;
+
+int delay = 1;
 
 int WIN_WIDTH = 800, WIN_HEIGHT = 600;
-/*
-struct _Point
-{
-	std::vector<glm::vec3> neighbors;
-	float mass;
-	float spring_length;
-	float spring_constant;
-	float spring_friction;
-	glm::vec3 velocity_curr;
-	glm::vec3 velocity_prev;
-	glm::vec3 position_curr;
-	glm::vec3 position_prev;
-	glm::vec3 forces;
-};
-
-typedef _Point Point;
-typedef std::vector<Point> points;
-points pointsList;
-*/
 
 struct _Boid
 {
@@ -75,8 +65,8 @@ struct _Boid
 typedef _Boid Boid;
 typedef std::vector<Boid> boids;
 std::vector<glm::vec3> verts;	// Holds all the verts to draw out. Will be updated by boids
+std::vector<glm::vec3> obstacleVerts;	// Holds all the obstacle verts to draw out. Will be updated by boids
 boids boidsList;
-
 
 // function declarations... just to keep things kinda organized.
 void displayFunc();
@@ -91,7 +81,7 @@ void loadProjectionMatrix();
 void loadModelViewMatrix();
 void setupModelViewProjectionTransform();
 void reloadMVPUniform();
-void update_velocity();
+void update_velocity(Boid & boid_i, Boid & boid_j);
 float get_force_gravity();
 float get_distance();
 float get_acceleration();
@@ -100,13 +90,69 @@ void moveModelTo(glm::mat4 & model, glm::vec3 new_pos);
 void updateMatrixColumn(glm::mat4 & matrix, int column, glm::vec3 vector);
 float get_delta_time();
 float get_total_time();
-//float get_distance();
-//glm::vec3 get_force_dampening(Point & point_j, Point & point_x);
-//glm::vec3 get_spring_vector(Point & point_j, Point & point_x);
-//glm::vec3 get_force_spring(Point & point_j, Point & point_x);
-//glm::vec3 get_velocity(Point & point, glm::vec3 forces);
-//glm::vec3 get_position(Point & point, glm::vec3 velocity);
+void update_position(Boid & boid);
+void move_boid_to(Boid & boid, glm::vec3 position);
 float getRandFloat(float low, float high);
+
+void loadVec3FromFile(std::vector<glm::vec3> & vecs, std::string const & fileName)
+{
+	std::ifstream file(fileName);
+
+	if (!file)
+	{
+		throw std::runtime_error("Unable to open file.");
+	}
+
+	std::string line;
+	size_t index;
+	std::stringstream ss(std::ios_base::in);
+
+	size_t lineNum = 0;
+	vecs.clear();
+
+	while (getline(file, line))
+	{
+		++lineNum;
+
+		// remove comments	
+		index = line.find_first_of("#");
+		if (index != std::string::npos)
+		{
+			line.erase(index, std::string::npos);
+		}
+
+		// removes leading/tailing junk
+		line.erase(0, line.find_first_not_of(" \t\r\n\v\f"));
+		index = line.find_last_not_of(" \t\r\n\v\f") + 1;
+		if (index != std::string::npos)
+		{
+			line.erase(index, std::string::npos);
+		}
+
+		if (line.empty())
+		{
+			continue; // empty or commented out line
+		}
+
+		ss.str(line);
+		ss.clear();
+
+		float x, y, z;
+		if ((ss >> x >> y >> z) && (!ss || !ss.eof() || ss.good()))
+		{
+			throw std::runtime_error("Error read file: "
+				+ line
+				+ " (line: "
+				+ std::to_string(lineNum)
+				+ ")");
+		}
+		else
+		{
+			vecs.push_back(glm::vec3(x, y, z));
+		}
+	}
+	file.close();
+}
 
 void displayFunc()
 {
@@ -164,8 +210,8 @@ void loadProjectionMatrix()
 
 void loadModelViewMatrix()
 {
-	M = glm::translate(M, glm::vec3(0, 0, -10));
-	M = glm::scale(M, glm::vec3(1.0));
+	M = glm::translate(M, glm::vec3(0, 0, -50));
+	//M = glm::scale(M, glm::vec3(-10));
 }
 
 void setupModelViewProjectionTransform()
@@ -236,9 +282,9 @@ void loadBuffer()
 			verts.data(),		// pointer (glm::vec3*) to contents of verts
 			GL_STATIC_DRAW );	// Usage pattern of GPU buffer
 	
-	cout << "Verts: " << endl;
-	for (glm::vec3 vert : verts)
-		cout << glm::to_string(vert) << endl;
+	//cout << "Verts: " << verts.size() << endl;
+	//for (glm::vec3 vert : verts)
+	//	cout << glm::to_string(vert) << endl;
 	// RGB values for the vertices
 	std::vector<glm::vec3> colors;
 	if ((verts.size() % 3) !=0)
@@ -264,34 +310,49 @@ float getRandFloat(float low, float high)
 }
 
 // Returns a boid where the center defines where the shape will be generated
-Boid createBoid(glm::vec3 boidCenter)
+Boid createBoid(glm::vec3 boidCenter, glm::vec3 velocity)
 {
 	Boid aBoid;
-	aBoid.head = glm::vec3(0, 0.3, 0) + boidCenter;
-	aBoid.left = glm::vec3(-0.15, -0.15, 0) + boidCenter;
-	aBoid.right = glm::vec3(0.15, -0.15, 0) + boidCenter;
+	aBoid.velocity = velocity;
+	move_boid_to(aBoid, boidCenter);
 	return aBoid;
+}
+
+void move_boid_to(Boid & boid, glm::vec3 position)
+{
+	boid.position = position;
+	boid.head = glm::vec3(0, 0.3, 0.2) + position;
+	boid.left = glm::vec3(-0.15, -0.15, -0.3) + position;
+	boid.right = glm::vec3(0.15, -0.15, 0.3) + position;
 }
 
 void initBuffer()
 {
-	boidsList.push_back(createBoid(glm::vec3(0, 0, 0)));
-	boidsList.push_back(createBoid(glm::vec3(1, 0, -1)));
-	boidsList.push_back(createBoid(glm::vec3(2, 0, 1)));
-	//int start_point = -10;
-	//for (int i = 0; i < num_points; i++)
-	//{
-	//	Boid a;
-	//	aPoint.position_curr = glm::vec3(start_point + (i * 5), 30, 0);
-	//	aPoint.spring_constant = global_spring_constant;
-	//	aPoint.spring_friction = global_spring_friction;
-	//	aPoint.spring_length = global_spring_length;
-	//	aPoint.mass = global_point_mass;
-	//	pointsList.push_back(aPoint);
-	//}
+	int num_boids = 100;
+	//srand(std::time(NULL));
+	for (int i = 0; i < num_boids; i++)
+		boidsList.push_back(createBoid(glm::vec3(getRandFloat(-10, 10), getRandFloat(-10, 10), getRandFloat(0, 3)), glm::vec3(getRandFloat(0, 2), 0, 0)));
 }
 
-void init()
+void initBuffer(std::string boid_positions_file, std::string boid_velocities_file)
+{
+	std::vector<glm::vec3> boid_positions;
+	std::vector<glm::vec3> boid_velocities;
+	
+	loadVec3FromFile(boid_positions, boid_positions_file);
+	loadVec3FromFile(boid_velocities, boid_velocities_file);
+
+	for (int i = 0; i < boid_positions.size(); i++)
+	{
+		glm::vec3 boid_position = boid_positions.at(i);
+		glm::vec3 boid_velocity;
+		if (i < boid_velocities.size())
+			boid_velocity = boid_velocities.at(i);
+		boidsList.push_back(createBoid(boid_position, boid_velocity));
+	}
+}
+
+void init(std::string boid_positions, std::string boid_velocities)
 {
 	glEnable( GL_DEPTH_TEST );
 
@@ -299,7 +360,8 @@ void init()
 	//mass_previous_position = initial_mass_position;
 	generateIDs();
 	setupVAO();
-	initBuffer();
+	//initBuffer(boid_positions, boid_velocities);
+	initBuffer();	//Generate randomized flock
 	loadBuffer();
 
 	loadModelViewMatrix();
@@ -308,18 +370,6 @@ void init()
 	reloadMVPUniform();
 }
 
-//void update_position(Point & point, glm::vec3 position)
-//{
-//	point.position_prev = point.position_curr;
-//	point.position_curr = position;
-//}
-//
-//void update_velocity(Point & point, glm::vec3 velocity)
-//{
-//	point.velocity_prev = point.velocity_curr;
-//	point.velocity_curr = velocity;
-//}
-//
 //float get_force_gravity(Point & point)
 //{
 //	return gravity * point.mass;
@@ -327,13 +377,31 @@ void init()
 
 void timerFunc(int delay)
 {
+	for (int i = 0; i < boidsList.size(); i++)
+	{
+		for (int j = 0; j < boidsList.size(); j++)
+		{
+			if (i != j)
+			{
+				Boid & boid_i = boidsList.at(i);
+				Boid & boid_j = boidsList.at(j);
 
+				update_velocity(boid_i, boid_j);
+			}
+		}
+	}
+	for (int i = 0; i < boidsList.size(); i++)
+	{
+		Boid & boid = boidsList.at(i);
+		update_position(boid);
+		//cout << "Boid: " << i << " position: " << glm::to_string(boid.position) << endl;
+	}
 	setupModelViewProjectionTransform();
 
 	// send changes to GPU
 	loadBuffer();
 	reloadMVPUniform();
-	M = glm::rotate(M, 0.5f, glm::vec3(0.0f, 1.0f, 0.0f));
+	//M = glm::rotate(M, 0.9f, glm::vec3(0.0f, 1.0f, 0.0f));
 	glutPostRedisplay();
 	glutTimerFunc(delay, timerFunc, delay);
 }
@@ -354,37 +422,123 @@ float get_delta_time()
 {
 	return double(delay) / 100;
 }
-/*
-glm::vec3 get_force_dampening(Point & point_j, Point & point_x)
+
+
+void update_velocity(Boid & boid_i, Boid & boid_j)
 {
-	glm::vec3 spring_vector = get_spring_vector(point_j, point_x);
-	return (point_x.spring_friction * (glm::dot((point_j.velocity_prev - point_x.velocity_curr), spring_vector)) * spring_vector);
+	float radius_total = glm::length(boid_i.position - boid_j.position);
+	glm::vec3 distance = boid_j.position - boid_i.position;
+	glm::vec3 velocity = glm::vec3(0, 0, 0);
+	if (radius_total <= RADIUS_MAX)
+	{
+		if (radius_total < RADIUS_AVOID)
+		{
+			//velocity_avoid_scalar = 1 / pow(radius_total, 2);
+			velocity += (velocity_avoid_scalar * (-distance));
+		}
+		else if (radius_total < RADIUS_COHERANCE)
+		{
+			velocity += velocity_coherance_scalar * boid_j.velocity;
+		} 
+		else// if (radius_total < RADIUS_ATTRACT)
+		{
+			velocity += velocity_attract_scalar * distance;
+		}
+		//else
+		//{
+		//	cout << "boid_i " << glm::to_string(boid_i.position) << endl;
+		//	cout << "boid_j " << glm::to_string(boid_j.position) << endl;
+		//	cout << "radius_total " << radius_total << endl;
+		//	cerr << "get_velocity: This block should never be hit" << endl;
+		//}
+	}
+
+	//cout << "Boid Velocity Before: " << glm::to_string(boid_i.velocity) << endl;
+	boid_i.velocity += (velocity_scalar * velocity);
+	//cout << "Boid Velocity After: " << glm::to_string(boid_i.velocity) << endl;
 }
 
-glm::vec3 get_spring_vector(Point & point_j, Point & point_x)
+void update_position(Boid & boid)
 {
-	glm::vec3 spring_vector = (point_j.position_curr - point_x.position_curr);
-	return glm::normalize(spring_vector);
+	glm::vec3 new_pos = boid.position + get_delta_time() * boid.velocity;
+	move_boid_to(boid, new_pos);
 }
 
-glm::vec3 get_force_spring(Point & point_j, Point & point_x)
-{
-	glm::vec3 spring_vector = get_spring_vector(point_j, point_x);
-	return point_x.spring_constant * spring_vector * (glm::length(point_j.position_curr - point_x.position_curr) - point_x.spring_length);
-}
+//void mouseMove(int x, int y)
+//{
+//	if (left_click)
+//	{
+//		cout << "(x,y): (" << x << ", " << y << ")" << endl;
+//		boidsList.push_back(createBoid(glm::vec3(x, y, 0), glm::vec3(0, 0, 0)));
+//		cout << "Boids List: " << boidsList.size() << endl; 
+//		loadBuffer();
+//		reloadMVPUniform();
+//		//M = glm::rotate(M, 0.9f, glm::vec3(0.0f, 1.0f, 0.0f));
+//		glutPostRedisplay();
+//	}
+//
+//	//	delta_y -= y;
+//	//	delta_x -= x;
+//
+//	//	if (translate_bool)
+//	//		V = glm::translate(V, glm::vec3(-delta_x / 300, delta_y / 500, 0));
+//	//	else
+//	//	{
+//	//		V = glm::rotate(V, delta_y / 10, glm::vec3(-1.0f, 0.0f, 0.0f));
+//	//		V = glm::rotate(V, delta_x / 10, glm::vec3(0.0f, 1.0f, 0.0f));
+//	//	}
+//
+//	//	delta_x = x;
+//	//	delta_y = y;
+//	//}
+//	//if (right_click)
+//	//{
+//	//	delta_z -= y;
+//	//	V = glm::translate(V, glm::vec3(0, 0, delta_z / 500));
+//	//	delta_z = y;
+//	//}
+//	//render();
+//}
+//
+//void mouseButton(int button, int state, int x, int y)
+//{
+//	switch (button)
+//	{
+//	case GLUT_LEFT_BUTTON:
+//		std::cout << "Left Button" << std::endl;
+//		if (state == GLUT_DOWN){
+//			left_click = true;
+//			//delta_x = x;
+//			//delta_y = y;
+//		}
+//		else {
+//			left_click = false;
+//		}
+//		break;
+//	//case GLUT_MIDDLE_BUTTON:
+//	//	break;
+//	//case GLUT_RIGHT_BUTTON:
+//	//	if (state == GLUT_DOWN){
+//	//		right_click = true;
+//	//		delta_z = y;
+//	//	}
+//	//	else {
+//	//		right_click = false;
+//	//	}
+//	//	break;
+//	default:
+//		std::cerr << "Encountered an error with mouse button : " << button << ", state : " << state << std::endl;
+//	}
+//	std::cout << "Button: " << button << ", State: " << state << std::endl;
+//	printf("Button %s At %d %d\n", (state == GLUT_DOWN) ? "Down" : "Up", x, y);
+//}
 
-glm::vec3 get_velocity(Point & point, glm::vec3 forces)
-{
-	return (point.velocity_curr + (get_delta_time() * forces / point.mass));
-}
-
-glm::vec3 get_position(Point & point, glm::vec3 velocity)
-{
-	return point.position_curr + get_delta_time() * velocity;
-}
-*/
 int main( int argc, char** argv )
 {
+	std::string boid_positions("boid_positions.txt");
+	std::string boid_velocities("boid_velocities.txt");
+	std::string obstacles("obstacles.txt");
+
 	glutInit( &argc, argv );
 	// Setup FB configuration
 	glutInitDisplayMode( GLUT_RGB | GLUT_DOUBLE | GLUT_DEPTH );
@@ -406,7 +560,9 @@ int main( int argc, char** argv )
 	glutDisplayFunc( displayFunc );
 	glutReshapeFunc( resizeFunc );
 	glutTimerFunc(delay, timerFunc, delay);
-	init(); // our own initialize stuff func
+	//glutMouseFunc(mouseButton);
+	//glutMotionFunc(mouseMove);
+	init(boid_positions, boid_velocities); // our own initialize stuff func
 
 	glutMainLoop();
 
