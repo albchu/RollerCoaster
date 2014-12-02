@@ -24,6 +24,11 @@
     <ClCompile Include="main.cpp" />
     <ClCompile Include="ShaderTools.cpp" />
   </ItemGroup>
+  <ItemGroup>
+    <Text Include="boid_positions.txt" />
+    <Text Include="boid_velocities.txt" />
+    <Text Include="obstacles.txt" />
+  </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{CA905BA3-4228-4106-87EB-90B0A874022C}</ProjectGuid>
     <RootNamespace>Assignment3</RootNamespace>

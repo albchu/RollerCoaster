@@ -44,4 +44,15 @@
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
+  <ItemGroup>
+    <Text Include="obstacles.txt">
+      <Filter>Source Files</Filter>
+    </Text>
+    <Text Include="boid_positions.txt">
+      <Filter>Source Files</Filter>
+    </Text>
+    <Text Include="boid_velocities.txt">
+      <Filter>Source Files</Filter>
+    </Text>
+  </ItemGroup>
 </Project>

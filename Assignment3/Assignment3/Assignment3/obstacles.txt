@@ -1,4 +1,35 @@
 # Obstacles File: Takes in sets of three coordinates that will render triangles to present as obstacles for the boids
--10 20 -10
-5 2 1
-6 -3 2
+# Triangle Prism Right
+10 10 0		# Top Point
+10 -10 5	# Bottom Right Point
+10 -10 -5	# Bottom Left Point
+
+10 10 0		# Top Point
+20 -10 5	# Bottom Far
+10 -10 5	# Bottom Right Point
+
+10 10 0		# Top Point
+20 -10 5	# Bottom Far
+10 -10 5	# Bottom Right Point
+
+20 -10 5	# Bottom Far
+10 -10 5	# Bottom Right Point
+10 -10 -5	# Bottom Left Point
+
+# Triangle Prism Left
+-10 5 10	# Top Point
+-10 10 10	# Bottom Right Point
+-10 10 0	# Bottom Left Point
+
+-10 5 10	# Top Point
+-15 10 5	# Bottom Far
+-10 10 10	# Bottom Right Point
+
+-10 5 10	# Top Point
+-15 10 5	# Bottom Far
+-10 10 10	# Bottom Right Point
+
+-15 10 5	# Bottom Far
+-10 10 10	# Bottom Right Point
+-10 10 0	# Bottom Left Point
+

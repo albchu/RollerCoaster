@@ -39,15 +39,15 @@ glm::mat4 P;
 //float global_spring_friction = 1.0f;
 //float global_point_mass = 3.0f;
 //float global_spring_length = 2.0f;
-float RADIUS_AVOID = 0.5f;		// The max distance threshold where a boid will move away from its neighbor
-float RADIUS_COHERANCE = 2.0f;	// The max distance threshold where a boid will move in the same velocity as its neighbor
-float RADIUS_ATTRACT = 5.0f;	// The max distance threshold before a boid will move towards that neighbor
+float RADIUS_AVOID = 6.0f;		// The max distance threshold where a boid will move away from its neighbor
+float RADIUS_COHERANCE = 8.0f;	// The max distance threshold where a boid will move in the same velocity as its neighbor
+float RADIUS_ATTRACT = 10.0f;	// The max distance threshold before a boid will move towards that neighbor
 float RADIUS_MAX = 15.0f;	// The max distance threshold before a boid will move towards that neighbor
-float velocity_scalar = 0.002f;
-float velocity_avoid_scalar = 0.02f;
-float velocity_coherance_scalar = 0.008f;
-float velocity_attract_scalar = 0.04f;
-
+float velocity_scalar = 0.008f;
+float velocity_avoid_scalar = 0.3f;
+float velocity_coherance_scalar = 0.03f;
+float velocity_attract_scalar = 0.08f;
+float VELOCITY_LIMIT = 5;
 bool left_click = false;
 bool right_click = false;
 bool middle_click = false;
@@ -215,7 +215,7 @@ void loadProjectionMatrix()
 
 void loadModelViewMatrix()
 {
-	M = glm::translate(M, glm::vec3(0, 0, -50));
+	M = glm::translate(M, glm::vec3(0, 0, -70));
 	//M = glm::scale(M, glm::vec3(-10));
 }
 
@@ -287,19 +287,26 @@ void loadBuffer()
 			verts.data(),		// pointer (glm::vec3*) to contents of verts
 			GL_STATIC_DRAW );	// Usage pattern of GPU buffer
 	
-	//cout << "Verts: " << verts.size() << endl;
-	//for (glm::vec3 vert : verts)
-	//	cout << glm::to_string(vert) << endl;
 	// RGB values for the vertices
 	std::vector<glm::vec3> colors;
 	if ((verts.size() % 3) !=0)
 		cerr << "Cannot load colors for boids since wrong number of vertices detected" << endl;
-	for (int i = 0; i < verts.size(); i += 3)
+
+	// Color the boids
+	for (int i = 0; i < verts.size() - obstacle_verts.size(); i += 3)
 	{
 		//Head Color
 		colors.push_back(glm::vec3(1.0, 0, 0));
 		colors.push_back(glm::vec3(0, 0, 1.0));
 		colors.push_back(glm::vec3(0, 0, 1.0));
+	}
+	// Color the obstacles
+	for (int i = verts.size() - obstacle_verts.size(); i < verts.size(); i += 3)
+	{
+		//Head Color
+		colors.push_back(glm::vec3(1.0, 1.0, 0));
+		colors.push_back(glm::vec3(1.0, 0, 1.0));
+		colors.push_back(glm::vec3(1.0, 0, 1.0));
 	}
 
 	glBindBuffer(GL_ARRAY_BUFFER, colorBufferID);
@@ -327,17 +334,17 @@ void move_boid_to(Boid & boid, glm::vec3 position)
 {
 	boid.position = position;
 	boid.head = glm::vec3(0, 0.3, 0.2) + position;
-	boid.left = glm::vec3(-0.15, -0.15, -0.3) + position;
-	boid.right = glm::vec3(0.15, -0.15, 0.3) + position;
+	boid.left = glm::vec3(-0.1, -0.05, -0.15) + position;
+	boid.right = glm::vec3(0.1, -0.05, 0.15) + position;
 }
 
 void initBuffer(std::string obstacles_file)
 {
 	loadVec3FromFile(obstacle_verts, obstacles_file);
-	int num_boids = 100;
+	int num_boids = 250;
 	//srand(std::time(NULL));
 	for (int i = 0; i < num_boids; i++)
-		boidsList.push_back(createBoid(glm::vec3(getRandFloat(-10, 10), getRandFloat(-10, 10), getRandFloat(0, 3)), glm::vec3(getRandFloat(0, 2), 0, 0)));
+		boidsList.push_back(createBoid(glm::vec3(getRandFloat(-10, 10), getRandFloat(-10, 10), getRandFloat(-10, 10)), glm::vec3(getRandFloat(0, 5), getRandFloat(0, 5), getRandFloat(0, 5))));
 }
 
 void initBuffer(std::string boid_positions_file, std::string boid_velocities_file, std::string obstacles_file)
@@ -377,10 +384,67 @@ void init(std::string boid_positions, std::string boid_velocities, std::string o
 	reloadMVPUniform();
 }
 
-//float get_force_gravity(Point & point)
-//{
-//	return gravity * point.mass;
-//}
+void update_coordinate_frame(Boid & boid)
+{
+	glm::vec3 tangent = glm::normalize(boid.velocity);
+	glm::vec3 normal = glm::vec3(0, 1, 0);
+	glm::vec3 binormal = glm::cross(tangent, normal);
+	boid.head += tangent;
+	boid.left = boid.left - tangent + normal;
+	boid.right = boid.right - tangent - normal;
+}
+
+void collision_detection(Boid & boid)
+{
+	for (int i = 0; i < obstacle_verts.size(); i += 3)
+	{
+		glm::vec3 tri_A = obstacle_verts.at(i);
+		glm::vec3 tri_B = obstacle_verts.at(i+1);
+		glm::vec3 tri_C = obstacle_verts.at(i+2);
+		
+		glm::vec3 tri_n = glm::cross(tri_B - tri_A, tri_C - tri_A);
+
+		// Get distance to triangle plane from boid position
+		float distance = (glm::dot(boid.position - tri_A, tri_n) / glm::dot(boid.velocity, tri_n));
+
+		// Get point on the triangle plane
+		glm::vec3 p = boid.position + (boid.velocity * distance);
+
+		glm::vec3 vec1 = glm::normalize(tri_A - p);
+		glm::vec3 vec2 = glm::normalize(tri_B - p);
+		glm::vec3 vec3 = glm::normalize(tri_C - p);
+
+		float cosTheta1 = glm::dot(vec1, vec2);
+		float cosTheta2 = glm::dot(vec2, vec3);
+		float cosTheta3 = glm::dot(vec3, vec1);
+
+		float cosSum = cosTheta1 + cosTheta2 + cosTheta3;
+		//cout << "cosSum: " << cosSum <<endl;
+		if (cosSum > 0.9 && cosSum < 1.1)
+		{
+			boid.velocity -= glm::normalize(tri_n) / pow(glm::length(p - boid.position), 3);// *glm::vec3(getRandFloat(5, 10), getRandFloat(5, 10), getRandFloat(5, 10));// +glm::vec3(getRandFloat(-0.3, 0.3), getRandFloat(-0.3, 0.3), getRandFloat(-0.3, 0.3));
+		}
+	}
+}
+
+void bound_check(Boid & boid)
+{
+	int velocity_border = 30;
+	if (boid.position.x > velocity_border)
+		boid.velocity -= glm::vec3(boid.velocity.x + getRandFloat(0, 3), 0, 0);
+	if (boid.position.x < -velocity_border)
+		boid.velocity -= glm::vec3(boid.velocity.x - getRandFloat(0, 3), 0, 0);
+
+	if (boid.position.y > velocity_border)
+		boid.velocity -= glm::vec3(0, boid.velocity.y + getRandFloat(0, 3), 0);
+	if (boid.position.y < -velocity_border)
+		boid.velocity -= glm::vec3(0, boid.velocity.y - getRandFloat(0, 3), 0);
+
+	if (boid.position.z > velocity_border)
+		boid.velocity -= glm::vec3(0, 0, boid.velocity.z + getRandFloat(0, 3));
+	if (boid.position.z < -velocity_border)
+		boid.velocity -= glm::vec3(0, 0, boid.velocity.z - getRandFloat(0, 3));
+}
 
 void timerFunc(int delay)
 {
@@ -400,7 +464,10 @@ void timerFunc(int delay)
 	for (int i = 0; i < boidsList.size(); i++)
 	{
 		Boid & boid = boidsList.at(i);
+		collision_detection(boid);
+		bound_check(boid);
 		update_position(boid);
+		update_coordinate_frame(boid);
 	}
 	setupModelViewProjectionTransform();
 
@@ -426,7 +493,7 @@ void updateMatrixColumn(glm::mat4 & matrix, int column, glm::vec3 vector)
 
 float get_delta_time()
 {
-	return double(delay) / 100;
+	return double(delay) / 10;
 }
 
 
@@ -453,6 +520,7 @@ void update_velocity(Boid & boid_i, Boid & boid_j)
 	}
 	boid_i.velocity += (velocity_scalar * velocity);
 }
+
 
 void update_position(Boid & boid)
 {
@@ -491,7 +559,6 @@ void mouseButton(int button, int state, int x, int y)
 	switch (button)
 	{
 	case GLUT_LEFT_BUTTON:
-		std::cout << "Left Button" << std::endl;
 		if (state == GLUT_DOWN){
 			left_click = true;
 		}
