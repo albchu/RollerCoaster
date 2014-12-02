@@ -16,6 +16,8 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <exception>
+#include <stdexcept>
 
 using std::cout;
 using std::endl;
@@ -422,7 +424,7 @@ void collision_detection(Boid & boid)
 		//cout << "cosSum: " << cosSum <<endl;
 		if (cosSum > 0.9 && cosSum < 1.1)
 		{
-			boid.velocity -= glm::normalize(tri_n) / pow(glm::length(p - boid.position), 3);// *glm::vec3(getRandFloat(5, 10), getRandFloat(5, 10), getRandFloat(5, 10));// +glm::vec3(getRandFloat(-0.3, 0.3), getRandFloat(-0.3, 0.3), getRandFloat(-0.3, 0.3));
+			boid.velocity -= glm::normalize(tri_n) / glm::vec3(pow(glm::length(p - boid.position), 3)));// *glm::vec3(getRandFloat(5, 10), getRandFloat(5, 10), getRandFloat(5, 10));// +glm::vec3(getRandFloat(-0.3, 0.3), getRandFloat(-0.3, 0.3), getRandFloat(-0.3, 0.3));
 		}
 	}
 }
